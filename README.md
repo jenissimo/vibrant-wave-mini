@@ -50,12 +50,7 @@ OPENROUTER_API_KEY=sk-or-your-key-here
 OPENROUTER_IMAGE_MODEL=google/gemini-2.5-flash-image-preview
 ```
 
-### 3. Install Dependencies
-```bash
-bun install
-```
-
-### 4. Run Development Server
+### 3. Run Development Server
 Choose your platform:
 
 **Windows:**

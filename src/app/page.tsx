@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import Canvas, { CanvasRef } from '@/components/Canvas';
 import CanvasTopToolbar from '@/components/CanvasTopToolbar';
 import CanvasBottomZoom from '@/components/CanvasBottomZoom';
+import AssistantNote from '@/components/AssistantNote';
 import BottomBar from '@/components/BottomBar';
 import LayersPanel from '@/components/panels/LayersPanel';
 import ElementSettingsPanel from '@/components/panels/ElementSettingsPanel';
@@ -160,10 +161,10 @@ export default function Home() {
           tabIndex={-1} // Make div focusable
         >
           {gen.assistantNote && (
-            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-30 bg-background border border-border shadow px-3 py-2 rounded text-xs max-w-[80%] flex items-start gap-2">
-              <div className="flex-1 text-foreground">{gen.assistantNote}</div>
-              <button className="text-muted-foreground hover:text-foreground" onClick={() => gen.setAssistantNote(null)} aria-label="Dismiss note">×</button>
-            </div>
+            <AssistantNote
+              message={gen.assistantNote}
+              onDismiss={() => gen.setAssistantNote(null)}
+            />
           )}
           {/* Canvas top-left toolbar (icons) */}
           <CanvasTopToolbar
