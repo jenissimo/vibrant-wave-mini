@@ -1,26 +1,170 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  /* Все переменные остаются для совместимости с вашим фреймворком */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-geist-sans); /* Geist - отличный выбор, оставляем */
+  --font-mono: var(--font-geist-mono); /* Geist - отличный выбор, оставляем */
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-canvas: var(--canvas-background);
+  --color-canvas-foreground: var(--canvas-primary);
+  --color-canvas-border: var(--canvas-border);
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 4px);
+  --radius-xl: calc(var(--radius) + 8px);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+:root {
+  /*
+    * UI/UX Комментарий:
+    * Уменьшаем радиус для более четкого, "инженерного" вида. 8px - современный стандарт для pro-инструментов.
+  */
+  --radius: 0.5rem; /* было 0.625rem (10px), стало 8px */
+
+  /*
+    * UI/UX Комментарий:
+    * Используем легкий оттенок серого с холодным подтоном (hue: 250) вместо чистого белого.
+    * Это снижает напряжение глаз и выглядит более премиально.
+    * Основной текст - очень темный серый, а не черный, для того же эффекта.
+  */
+  --background: oklch(0.99 0.003 250);
+  --foreground: oklch(0.15 0.01 250);
+  --card: oklch(1 0 0); /* Карточки делаем чисто белыми для контраста с фоном */
+  --card-foreground: oklch(0.15 0.01 250);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.15 0.01 250);
+
+  /*
+    * UI/UX Комментарий:
+    * Смещаем основной цвет в сторону индиго (hue: 255) и делаем его чуть менее ярким
+    * для более спокойного и профессионального акцента.
+   */
+  --primary: oklch(0.62 0.19 255);
+  --primary-foreground: oklch(0.99 0.003 250);
+
+  --secondary: oklch(0.94 0.008 250);
+  --secondary-foreground: oklch(0.25 0.01 250);
+  --muted: oklch(0.94 0.008 250);
+  --muted-foreground: oklch(0.45 0.01 250);
+
+  --accent: oklch(0.94 0.008 250);
+  --accent-foreground: oklch(0.25 0.01 250);
+
+  --destructive: oklch(0.65 0.22 25); /* Более насыщенный и заметный красный */
+  --destructive-foreground: oklch(0.99 0.003 250);
+
+  --border: oklch(0.9 0.01 250);
+  --input: oklch(0.9 0.01 250);
+  --ring: oklch(0.68 0.19 255); /* Цвет кольца фокуса делаем чуть ярче основного */
+
+  /*
+   * UI/UX Комментарий:
+   * Фон холста делаем заметно темнее фона UI, чтобы рабочая область четко выделялась.
+  */
+  --canvas-background: oklch(0.96 0.005 250);
+  --canvas-primary: oklch(0.65 0.19 255);
+  --canvas-primary-foreground: oklch(0.99 0.003 250);
+  --canvas-badge-text: oklch(0.99 0.003 250);
+  --canvas-border: oklch(0.88 0.01 250);
+  --canvas-dots: oklch(0.7 0.01 250);
+}
+
+.dark {
+  /*
+    * UI/UX Комментарий:
+    * Очень темный, почти черный фон с холодным оттенком (hue: 250). Глубокий, но не абсолютно черный.
+    * Текст - светло-серый, не чисто белый, для комфорта глаз.
+  */
+  --background: oklch(0.12 0.01 250);
+  --foreground: oklch(0.98 0.002 250);
+  --card: oklch(0.16 0.012 250); /* Карточки чуть светлее фона для иерархии */
+  --card-foreground: oklch(0.98 0.002 250);
+  --popover: oklch(0.14 0.01 250);
+  --popover-foreground: oklch(0.98 0.002 250);
+
+  /*
+    * UI/UX Комментарий:
+    * Основной цвет в темной теме должен быть ярче для достаточного контраста.
+  */
+  --primary: oklch(0.7 0.2 255);
+  --primary-foreground: oklch(0.12 0.01 250);
+
+  --secondary: oklch(0.22 0.015 250);
+  --secondary-foreground: oklch(0.98 0.002 250);
+  --muted: oklch(0.22 0.015 250);
+  --muted-foreground: oklch(0.65 0.01 250);
+
+  --accent: oklch(0.22 0.015 250);
+  --accent-foreground: oklch(0.98 0.002 250);
+
+  --destructive: oklch(0.7 0.2 25);
+  --destructive-foreground: oklch(0.98 0.002 250);
+
+  /*
+    * UI/UX Комментарий:
+    * Границы и поля ввода делаем с помощью полупрозрачного белого - это создает
+    * мягкое свечение и отлично работает в темных интерфейсах.
+  */
+  --border: oklch(1 0 0 / 0.15);
+  --input: oklch(1 0 0 / 0.1);
+  --ring: oklch(0.72 0.2 255);
+
+  /*
+   * UI/UX Комментарий:
+   * В темной теме фон холста совпадает с фоном UI для создания эффекта "бесконечного"
+   * иммерсивного пространства, как в профессиональных редакторах.
+  */
+  --canvas-background: oklch(0.12 0.01 250);
+  --canvas-primary: oklch(0.7 0.2 255);
+  --canvas-primary-foreground: oklch(0.98 0.002 250);
+  --canvas-badge-text: oklch(0.98 0.002 250);
+  --canvas-border: oklch(1 0 0 / 0.2);
+  --canvas-dots: oklch(0.3 0.01 250);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
   }
-}
+  body {
+    /* Добавляем сглаживание шрифтов для лучшей читаемости */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    @apply bg-background text-foreground transition-colors duration-200;
+  }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  /* Плавный переход для всех элементов при смене темы */
+  *, *::before, *::after {
+    transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out, border-color 0.2s ease-in-out;
+  }
+  
+  /*
+    * UI/UX Комментарий:
+    * Добавляем эффект "матового стекла" (glassmorphism) для тулбара.
+    * Это современный прием, который помогает отделить панель инструментов
+    * от холста, не перекрывая его полностью.
+  */
+  .canvas-toolbar {
+    @apply border-border bg-card/80 backdrop-blur-sm;
+  }
 }

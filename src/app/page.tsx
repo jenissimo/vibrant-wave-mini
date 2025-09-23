@@ -1,103 +1,374 @@
-import Image from "next/image";
+'use client';
+
+import React, { useState, useRef, useEffect } from 'react';
+import Canvas, { CanvasRef } from '@/components/Canvas';
+import CanvasTopToolbar from '@/components/CanvasTopToolbar';
+import CanvasBottomZoom from '@/components/CanvasBottomZoom';
+import BottomBar from '@/components/BottomBar';
+import LayersPanel from '@/components/panels/LayersPanel';
+import ElementSettingsPanel from '@/components/panels/ElementSettingsPanel';
+import GenerationSettingsPanel from '@/components/panels/GenerationSettingsPanel';
+import VariantSwitcher from '@/components/VariantSwitcher';
+import LoadingIndicator from '@/components/LoadingIndicator';
+import { useHistoryState } from '@/lib/useHistoryState';
+import { useTheme } from '@/lib/useTheme';
+import { useCanvasLayout, useGenerationArea } from '@/lib/useCanvasLayout';
+import { useElementHistoryOps } from '@/lib/useElementHistoryOps';
+import { useGenerationFlow } from '@/lib/useGenerationFlow';
+import { useGlobalHotkeys } from '@/lib/useGlobalHotkeys';
+import type { DocSettings, DocState } from '@/lib/types';
+import { settingsStore } from '@/lib/settingsStore';
+import { commandManager } from '@/lib/commandManager';
+import { UpdateSettingsCommand } from '@/lib/commands/UpdateSettingsCommand';
+import { UpdateElementCommand } from '@/lib/commands/UpdateElementCommand';
+import { AddElementCommand } from '@/lib/commands/AddElementCommand';
+import { CanvasElementData } from '@/components/Canvas';
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const initialSettings: DocSettings = {
+    aspectRatio: '1:1',
+    gridEnabled: false,
+    gridCols: 2,
+    gridRows: 2,
+    gridThickness: 1,
+    gridColor: '#d1d5db',
+    backgroundColor: '#f5f5f5',
+    generationFillColor: '#ffffff',
+  };
+  const docHistory = useHistoryState({ elements: [], settings: initialSettings });
+  const elements = docHistory.present.elements;
+  const settings = docHistory.present.settings;
+  const [references, setReferences] = useState<string[]>([]);
+  const [prompt, setPrompt] = useState('');
+  const canvasRef = useRef<CanvasRef>(null);
+  const [interactionMode, setInteractionMode] = useState<'select' | 'pan'>('select');
+  const [snapEnabled, setSnapEnabled] = useState<boolean>(true);
+  const { isDarkMode, theme, isHydrated, toggleTheme } = useTheme();
+  const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
+  const [activeFocus, setActiveFocus] = useState<'canvas' | 'prompt' | null>(null);
+  const gen = useGenerationFlow();
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
+  const { canvasContainerRef, canvasSize, isCanvasReady } = useCanvasLayout();
+  const generationArea = useGenerationArea(settings, canvasSize);
+
+  // Element operations hook
+  const ops = useElementHistoryOps();
+  const {
+    onElementTransformStart,
+    onElementTransformEnd,
+    onElementDragStart,
+    onElementDragEnd,
+    zOrder,
+    addElementFromRef: addElementFromRefOp,
+    removeElement,
+  } = ops;
+  
+  const handleGenerate = async (variantCount: number = 1) => {
+    const base64 = canvasRef.current?.exportGenerationArea();
+    if (!base64) return;
+    await gen.handleGenerate({
+      variantCount,
+      payload: { prompt, canvas: base64, attachments: references },
+      onSingleVariant: async (imageUrl) => { await addVariantToCanvas(imageUrl); },
+    });
+  };
+
+  const addVariantToCanvas = async (imageUrl: string) => {
+    const img = new Image();
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error('Failed to load generated image'));
+      img.src = imageUrl;
+    });
+    const ratio = Math.min(
+      generationArea.width / Math.max(1, img.width),
+      generationArea.height / Math.max(1, img.height),
+      1
+    );
+    const w = Math.max(1, img.width * ratio);
+    const h = Math.max(1, img.height * ratio);
+    const x = (generationArea.width - w) / 2;
+    const y = (generationArea.height - h) / 2;
+    const id = `el_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
+    const newElement: CanvasElementData = { id, type: 'image', src: imageUrl, x, y, width: w, height: h, visible: true, locked: false };
+    commandManager.execute(new AddElementCommand(newElement));
+    setSelectedElementId(id);
+  };
+
+  const handleAcceptVariant = async (variant: { image: string | null; text: string | null }) => {
+    if (variant.image) {
+      await addVariantToCanvas(variant.image);
+    }
+    gen.setGeneratedVariants(null);
+  };
+
+  const handleCancelVariants = () => {
+    gen.setGeneratedVariants(null);
+  };
+
+  const onSelectElement = (id: string | null) => setSelectedElementId(id);
+  // Moved element handlers to a reusable hook
+  const { moveUp, moveDown, bringToFront, sendToBack } = zOrder;
+
+  // Add element from references into canvas center
+  const addElementFromRef = (index: number, src: string) => {
+    if (!src) return;
+    const id = addElementFromRefOp(src, generationArea);
+    setSelectedElementId(id);
+  };
+
+  // Keep selection valid across history changes
+  useEffect(() => {
+    if (!selectedElementId || selectedElementId === 'generation-area') return;
+    if (!elements.some(e => e.id === selectedElementId)) setSelectedElementId(null);
+  }, [elements, selectedElementId]);
+
+  // Global hotkeys
+  useGlobalHotkeys({
+    enabled: true,
+    selectedElementId,
+    elements,
+    removeElement: (id) => { removeElement(id); if (selectedElementId === id) setSelectedElementId(null); },
+    addElement: (el) => addElementFromRefOp(el.src, el),
+    addReference: (src) => setReferences([...references, src]),
+    setSelectedElementId,
+    undo: docHistory.undo,
+    redo: docHistory.redo,
+    activeFocus,
+  });
+
+  // Settings update helpers
+  const updateSettings = (partial: Partial<DocSettings>) => {
+    const currentDoc = settingsStore.getState().doc;
+    if (currentDoc) {
+      const oldSettings = currentDoc.settings;
+      const newSettings = { ...oldSettings, ...partial };
+      const command = new UpdateSettingsCommand(oldSettings, newSettings);
+      commandManager.execute(command);
+    }
+  };
+
+  return (
+    <div className="h-screen flex flex-col bg-muted/30">     
+      <div className="flex flex-1 overflow-hidden">
+        {/* Canvas area */}
+        <div
+          ref={canvasContainerRef}
+          className="flex-1 relative bg-background min-h-0"
+          onFocus={() => setActiveFocus('canvas')}
+          onBlur={() => setActiveFocus(null)}
+          tabIndex={-1} // Make div focusable
+        >
+          {gen.assistantNote && (
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-30 bg-background border border-border shadow px-3 py-2 rounded text-xs max-w-[80%] flex items-start gap-2">
+              <div className="flex-1 text-foreground">{gen.assistantNote}</div>
+              <button className="text-muted-foreground hover:text-foreground" onClick={() => gen.setAssistantNote(null)} aria-label="Dismiss note">×</button>
+            </div>
+          )}
+          {/* Canvas top-left toolbar (icons) */}
+          <CanvasTopToolbar
+            interactionMode={interactionMode}
+            setInteractionMode={setInteractionMode}
+            snapEnabled={snapEnabled}
+            onToggleSnap={setSnapEnabled}
+            isDarkMode={!!settingsStore.getState().settings.theme}
+            theme={settingsStore.getState().settings.theme}
+            isHydrated={isHydrated}
+            onToggleTheme={() => {
+              const currentTheme = settingsStore.getState().settings.theme;
+              if (currentTheme === 'light') {
+                settingsStore.setTheme('dark');
+              } else if (currentTheme === 'dark') {
+                settingsStore.setTheme('system');
+              } else {
+                settingsStore.setTheme('light');
+              }
+            }}
+            onDownload={() => {
+              const dataUrl = canvasRef.current?.exportGenerationArea();
+              if (!dataUrl) return;
+              const a = document.createElement('a');
+              a.href = dataUrl;
+              a.download = 'generation.png';
+              a.click();
+            }}
+          />
+
+          {isCanvasReady ? (
+            <Canvas
+              ref={canvasRef}
+              width={canvasSize.width}
+              height={canvasSize.height}
+              generationArea={generationArea}
+              gridEnabled={settings.gridEnabled}
+              backgroundColor={settings.backgroundColor}
+              gridCols={settings.gridCols}
+              gridRows={settings.gridRows}
+              gridColor={settings.gridColor}
+              gridThickness={settings.gridThickness}
+              generationFillColor={settings.generationFillColor}
+              attachmentCount={references.length}
+              elements={elements}
+              selectedElementId={selectedElementId}
+              interactionMode={interactionMode}
+              snapEnabled={snapEnabled}
+              onSelectElement={onSelectElement}
+              onElementPositionChange={() => {}}
+              onElementTransform={() => {}}
+              onElementTransformStart={(id) => onElementTransformStart(id, elements)}
+              onElementTransformMove={() => {}}
+              onElementTransformEnd={(id, finalRect) => onElementTransformEnd(id, finalRect)}
+              onElementDragStart={(id) => onElementDragStart(id, elements)}
+              onElementDragEnd={(id, finalPosition) => onElementDragEnd(id, finalPosition)}
+              onElementNudge={() => {}}
             />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+          ) : (
+            <div className="flex items-center justify-center h-full">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span className="inline-block size-4 rounded-full border-2 border-muted-foreground/30 border-t-foreground animate-spin" />
+                Initializing canvas...
+              </div>
+            </div>
+          )}
+
+
+          {/* Canvas bottom-center controls */}
+          <CanvasBottomZoom
+            onZoomOut={() => canvasRef.current?.zoomOut()}
+            onReset={() => canvasRef.current?.resetView()}
+            onZoomIn={() => canvasRef.current?.zoomIn()}
+            onFit={() => canvasRef.current?.fitToArea()}
+          />
+          {/* Settings panels */}
+          {selectedElementId === 'generation-area' && (
+            <GenerationSettingsPanel
+              aspectRatio={settings.aspectRatio}
+              setAspectRatio={(v) => updateSettings({ aspectRatio: v })}
+              gridEnabled={settings.gridEnabled}
+              setGridEnabled={(v) => updateSettings({ gridEnabled: v })}
+              gridCols={settings.gridCols}
+              setGridCols={(n) => updateSettings({ gridCols: n })}
+              gridRows={settings.gridRows}
+              setGridRows={(n: number) => updateSettings({ gridRows: n })}
+              gridThickness={settings.gridThickness}
+              setGridThickness={(n) => updateSettings({ gridThickness: n })}
+              gridColor={settings.gridColor}
+              setGridColor={(v) => updateSettings({ gridColor: v })}
+              generationFillColor={settings.generationFillColor}
+              setGenerationFillColor={(v) => updateSettings({ generationFillColor: v })}
+            />
+          )}
+          {selectedElementId && selectedElementId !== 'generation-area' && (() => {
+            const el = elements.find(e => e.id === selectedElementId);
+            if (!el) return null;
+            return (
+              <ElementSettingsPanel
+                element={el}
+                onChange={(updates)=> {
+                  const oldProps = (({ x, y, width, height, rotation, visible, locked, src, name }) => ({ x, y, width, height, rotation, visible, locked, src, name }))(el);
+                  const newProps = { ...oldProps, ...updates };
+                  commandManager.execute(new UpdateElementCommand(el.id, oldProps, newProps));
+                }}
+                onDelete={()=>{ removeElement(el.id); setSelectedElementId(null); }}
+                onDuplicate={()=>{
+                  const id = `el_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
+                  const newEl = { ...el, id, x: el.x + 16, y: el.y + 16 };
+                  commandManager.execute(new AddElementCommand(newEl));
+                  setSelectedElementId(id);
+                }}
+              />
+            );
+          })()}
+          <LayersPanel
+            elements={elements}
+            selectedId={selectedElementId}
+            onSelect={(id)=>{
+              setSelectedElementId(id as string);
+            }}
+            onToggleVisible={(id)=> {
+              const el = elements.find(e => e.id === id);
+              if (el) {
+                const oldProps = { visible: el.visible };
+                const newProps = { visible: !el.visible };
+                commandManager.execute(new UpdateElementCommand(el.id, oldProps, newProps));
+              }
+            }}
+            onToggleLocked={(id)=> {/* lock removed */}}
+            onDelete={(id)=>{ removeElement(id); if(selectedElementId===id) setSelectedElementId(null); }}
+            onMoveUp={moveUp}
+            onMoveDown={moveDown}
+            onBringToFront={bringToFront}
+            onSendToBack={sendToBack}
+            onImportImage={(file)=>{
+              const reader = new FileReader();
+              reader.onload = () => {
+                const src = String(reader.result || '');
+                const name = file.name;
+                // load image to compute aspect-fit size up to half of generation area
+                const img = new Image();
+                img.onload = () => {
+                  const maxW = generationArea.width * 0.5;
+                  const maxH = generationArea.height * 0.5;
+                  const ratio = Math.min(maxW / img.width, maxH / img.height, 1);
+                  const w = Math.max(1, img.width * ratio);
+                  const h = Math.max(1, img.height * ratio);
+                  const x = (generationArea.width - w) / 2;
+                  const y = (generationArea.height - h) / 2;
+                  const id = `el_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
+                  const newElement: CanvasElementData = { id, type: 'image', src, name, x, y, width: w, height: h, visible: true, locked: false };
+                  commandManager.execute(new AddElementCommand(newElement));
+                  setSelectedElementId(id);
+                };
+                img.src = src;
+              };
+              reader.readAsDataURL(file);
+            }}
+          />
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+        
+        {/* Sidebar removed */}
+      </div>
+      
+      {/* Bottom panel */}
+      <BottomBar
+        references={references}
+        setReferences={setReferences}
+        prompt={prompt}
+        setPrompt={setPrompt}
+        onGenerate={handleGenerate}
+        onAddRefToCanvas={addElementFromRef}
+        onPromptFocus={() => setActiveFocus('prompt')}
+        onPromptBlur={() => setActiveFocus(null)}
+      />
+
+      {/* Variant Switcher */}
+      {gen.generatedVariants && (
+        <VariantSwitcher
+          variants={gen.generatedVariants}
+          onAccept={handleAcceptVariant}
+          onCancel={handleCancelVariants}
+        />
+      )}
+
+      {/* Loading Indicator */}
+      <LoadingIndicator 
+        isVisible={gen.isGenerating} 
+        progress={gen.generationProgress}
+        message="Generating image..."
+      />
+
+      {gen.errorMsg && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/30" onClick={() => gen.setErrorMsg(null)} />
+          <div className="relative z-50 bg-background border border-border rounded-lg shadow-xl max-w-md w-[92%] p-4">
+            <div className="text-sm font-semibold text-foreground mb-2">Generation error</div>
+            <div className="text-sm text-foreground whitespace-pre-wrap mb-4">{gen.errorMsg}</div>
+            <div className="flex justify-end">
+              <button className="text-sm px-3 py-1.5 rounded bg-primary text-primary-foreground" onClick={() => gen.setErrorMsg(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
