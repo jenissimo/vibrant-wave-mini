@@ -300,6 +300,15 @@ export default function Home() {
             onMoveDown={moveDown}
             onBringToFront={bringToFront}
             onSendToBack={sendToBack}
+            onDownload={(id) => {
+              const el = elements.find(e => e.id === id);
+              if (el && el.src) {
+                const a = document.createElement('a');
+                a.href = el.src;
+                a.download = el.name || `element-${id}.png`;
+                a.click();
+              }
+            }}
             onImportImage={(file)=>{
               const reader = new FileReader();
               reader.onload = () => {
