@@ -146,8 +146,25 @@ Response (shape):
 ## Deployment
 Any Next.js-compatible host works (Vercel recommended).
 - Set environment variables (`OPENROUTER_API_KEY`, optional `OPENROUTER_IMAGE_MODEL`).
-- Build with `bun run build` or via the host’s build step.
+- Build with `bun run build` or via the host's build step.
 - Ensure serverless runtime can fetch `https://openrouter.ai/api/v1/chat/completions`.
+
+### Optional Authentication
+The app supports optional authentication via NextAuth:
+- Set `AUTH_ENABLED=true` to enable authentication
+- Configure `AUTH_USER` and `AUTH_PASSWORD` for login credentials
+- Set `NEXTAUTH_URL` to your production domain
+- Generate a secure `NEXTAUTH_SECRET` (e.g., `openssl rand -base64 32`)
+
+Example production `.env`:
+```env
+OPENROUTER_API_KEY=sk-or-your-key-here
+AUTH_ENABLED=true
+AUTH_USER=admin
+AUTH_PASSWORD=your-secure-password
+NEXTAUTH_URL=https://your-domain.com
+NEXTAUTH_SECRET=your-generated-secret
+```
 
 ---
 

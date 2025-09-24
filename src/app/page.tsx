@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
+import { useSession, signOut } from 'next-auth/react';
 import Canvas, { CanvasRef } from '@/components/Canvas';
 import CanvasTopToolbar from '@/components/CanvasTopToolbar';
 import CanvasBottomZoom from '@/components/CanvasBottomZoom';
@@ -17,7 +18,7 @@ import { useCanvasLayout, useGenerationArea } from '@/lib/useCanvasLayout';
 import { useElementHistoryOps } from '@/lib/useElementHistoryOps';
 import { useGenerationFlow } from '@/lib/useGenerationFlow';
 import { useGlobalHotkeys } from '@/lib/useGlobalHotkeys';
-import type { DocSettings, DocState } from '@/lib/types';
+import type { DocSettings } from '@/lib/types';
 import { settingsStore } from '@/lib/settingsStore';
 import { commandManager } from '@/lib/commandManager';
 import { UpdateSettingsCommand } from '@/lib/commands/UpdateSettingsCommand';
@@ -26,6 +27,7 @@ import { AddElementCommand } from '@/lib/commands/AddElementCommand';
 import { CanvasElementData } from '@/components/Canvas';
 
 export default function Home() {
+  const { data: session } = useSession();
   const initialSettings: DocSettings = {
     aspectRatio: '1:1',
     gridEnabled: false,
@@ -44,7 +46,7 @@ export default function Home() {
   const canvasRef = useRef<CanvasRef>(null);
   const [interactionMode, setInteractionMode] = useState<'select' | 'pan'>('select');
   const [snapEnabled, setSnapEnabled] = useState<boolean>(true);
-  const { isDarkMode, theme, isHydrated, toggleTheme } = useTheme();
+  const { isHydrated } = useTheme();
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
   const [activeFocus, setActiveFocus] = useState<'canvas' | 'prompt' | null>(null);
   const gen = useGenerationFlow();
@@ -172,7 +174,6 @@ export default function Home() {
             setInteractionMode={setInteractionMode}
             snapEnabled={snapEnabled}
             onToggleSnap={setSnapEnabled}
-            isDarkMode={!!settingsStore.getState().settings.theme}
             theme={settingsStore.getState().settings.theme}
             isHydrated={isHydrated}
             onToggleTheme={() => {
@@ -193,6 +194,8 @@ export default function Home() {
               a.download = 'generation.png';
               a.click();
             }}
+            onSignOut={() => signOut()}
+            showSignOut={!!session}
           />
 
           {isCanvasReady ? (
@@ -294,7 +297,7 @@ export default function Home() {
                 commandManager.execute(new UpdateElementCommand(el.id, oldProps, newProps));
               }
             }}
-            onToggleLocked={(id)=> {/* lock removed */}}
+            onToggleLocked={()=> {/* lock removed */}}
             onDelete={(id)=>{ removeElement(id); if(selectedElementId===id) setSelectedElementId(null); }}
             onMoveUp={moveUp}
             onMoveDown={moveDown}

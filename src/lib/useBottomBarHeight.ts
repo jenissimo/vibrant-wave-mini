@@ -34,3 +34,4 @@ export function useBottomBarHeight() {
 
   return height;
 }
+

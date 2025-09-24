@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  vibrant-wave:
+    image: oven/bun:1.2.22-alpine
+    working_dir: /app
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - OPENROUTER_IMAGE_MODEL=${OPENROUTER_IMAGE_MODEL:-google/gemini-2.5-flash-image-preview}
+      - AUTH_ENABLED=${AUTH_ENABLED:-false}
+      - AUTH_USER=${AUTH_USER:-admin}
+      - AUTH_PASSWORD=${AUTH_PASSWORD:-password123}
+      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+    volumes:
+      - .:/app
+      - /app/node_modules
+    command: >
+      sh -c "
+        bun install &&
+        bun run build &&
+        bun run start
+      "
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
