@@ -4,8 +4,8 @@ import { CanvasElementData } from '@/components/Canvas';
  * Export a slice element as a separate image
  */
 export async function exportSliceAsImage(element: CanvasElementData): Promise<string> {
-  if (!element.sliceX !== undefined || !element.sliceY !== undefined || 
-      !element.sliceWidth !== undefined || !element.sliceHeight !== undefined) {
+  if (element.sliceX === undefined || element.sliceY === undefined || 
+      element.sliceWidth === undefined || element.sliceHeight === undefined) {
     // Not a slice, return original image
     return element.src;
   }

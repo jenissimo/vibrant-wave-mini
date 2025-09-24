@@ -3,11 +3,13 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
+import { Download } from 'lucide-react';
 import BaseFloatingPanel from '@/components/panels/BaseFloatingPanel';
 import type { CanvasElementData } from '@/components/Canvas';
 import { commandManager } from '@/lib/commandManager';
 import { SliceElementCommand } from '@/lib/commands/SliceElementCommand';
 import { settingsStore } from '@/lib/settingsStore';
+import { exportSliceAsImage, isSlice } from '@/lib/sliceUtils';
 
 interface ElementSettingsPanelProps {
   element: CanvasElementData;
@@ -33,6 +35,30 @@ const ElementSettingsPanel: React.FC<ElementSettingsPanelProps> = ({ element, on
       settings.gridThickness
     );
     commandManager.execute(command);
+  };
+
+  const handleDownload = async () => {
+    if (!element.src) return;
+    
+    try {
+      let dataUrl: string;
+      if (isSlice(element)) {
+        // Export slice as separate image
+        dataUrl = await exportSliceAsImage(element);
+      } else {
+        // Use original image
+        dataUrl = element.src;
+      }
+      
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      // Use element name without extension, or fallback to element ID
+      const downloadName = element.name || `element-${element.id}`;
+      a.download = `${downloadName}.png`;
+      a.click();
+    } catch (error) {
+      console.error('Failed to export element:', error);
+    }
   };
 
   const canSlice = element.type === 'image';
@@ -83,6 +109,14 @@ const ElementSettingsPanel: React.FC<ElementSettingsPanelProps> = ({ element, on
               title={!canSlice ? "Slice available only for images" : "Slice element by grid"}
             >
               Slice
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={handleDownload}
+              title="Download element"
+            >
+              <Download className="w-3.5 h-3.5" />
             </Button>
             <Button variant="destructive" size="sm" onClick={onDelete}>Delete</Button>
           </div>
