@@ -1,5 +1,5 @@
 import React from 'react';
-import { Hand, MousePointer, Download, Sun, Moon, Monitor, LogOut } from 'lucide-react';
+import { Hand, MousePointer, Download, Sun, Moon, Monitor, LogOut, Undo, Redo } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -15,9 +15,28 @@ interface CanvasTopToolbarProps {
   onToggleTheme?: () => void;
   onSignOut?: () => void;
   showSignOut?: boolean;
+  onUndo?: () => void;
+  onRedo?: () => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
 }
 
-const CanvasTopToolbar: React.FC<CanvasTopToolbarProps> = ({ interactionMode, setInteractionMode, onDownload, snapEnabled, onToggleSnap, theme, isHydrated, onToggleTheme, onSignOut, showSignOut }) => {
+const CanvasTopToolbar: React.FC<CanvasTopToolbarProps> = ({ 
+  interactionMode, 
+  setInteractionMode, 
+  onDownload, 
+  snapEnabled, 
+  onToggleSnap, 
+  theme, 
+  isHydrated, 
+  onToggleTheme, 
+  onSignOut, 
+  showSignOut,
+  onUndo,
+  onRedo,
+  canUndo,
+  canRedo
+}) => {
   return (
     <div className="absolute top-3 left-3 z-10 flex items-center gap-2 canvas-toolbar backdrop-blur shadow-sm rounded-md px-2 py-1">
       <Button variant={interactionMode==='select' ? 'default' : 'ghost'} size="icon" onClick={() => setInteractionMode('select')} title="Select (V)">
@@ -25,6 +44,13 @@ const CanvasTopToolbar: React.FC<CanvasTopToolbarProps> = ({ interactionMode, se
       </Button>
       <Button variant={interactionMode==='pan' ? 'default' : 'ghost'} size="icon" onClick={() => setInteractionMode('pan')} title="Pan (H)">
         <Hand size={16} />
+      </Button>
+      <div className="w-px h-5 bg-border mx-1" />
+      <Button variant="ghost" size="icon" onClick={onUndo} disabled={!canUndo} title="Undo (Ctrl+Z)">
+        <Undo size={16} />
+      </Button>
+      <Button variant="ghost" size="icon" onClick={onRedo} disabled={!canRedo} title="Redo (Ctrl+Y)">
+        <Redo size={16} />
       </Button>
       <div className="w-px h-5 bg-border mx-1" />
       <div className="flex items-center gap-2 px-1">

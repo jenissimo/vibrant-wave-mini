@@ -31,12 +31,24 @@ export function useGlobalHotkeys(args: {
       if (!selectedElementId || selectedElementId === 'generation-area') return;
       removeElement(selectedElementId);
     }},
-    { key: 'z', ctrl: true, handler: undo },
-    { key: 'z', meta: true, handler: undo },
-    { key: 'y', ctrl: true, handler: redo },
-    { key: 'y', meta: true, handler: redo },
-    { key: 'Z', ctrl: true, shift: true, handler: redo },
-    { key: 'Z', meta: true, shift: true, handler: redo },
+    { key: 'z', ctrl: true, handler: () => {
+      if (activeFocus === 'canvas') undo();
+    }},
+    { key: 'z', meta: true, handler: () => {
+      if (activeFocus === 'canvas') undo();
+    }},
+    { key: 'y', ctrl: true, handler: () => {
+      if (activeFocus === 'canvas') redo();
+    }},
+    { key: 'y', meta: true, handler: () => {
+      if (activeFocus === 'canvas') redo();
+    }},
+    { key: 'Z', ctrl: true, shift: true, handler: () => {
+      if (activeFocus === 'canvas') redo();
+    }},
+    { key: 'Z', meta: true, shift: true, handler: () => {
+      if (activeFocus === 'canvas') redo();
+    }},
   ], enabled);
 
   // Copy-paste events

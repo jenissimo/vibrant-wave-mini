@@ -210,6 +210,10 @@ export default function Home() {
             }}
             onSignOut={() => signOut()}
             showSignOut={!!session}
+            onUndo={docHistory.undo}
+            onRedo={docHistory.redo}
+            canUndo={docHistory.canUndo}
+            canRedo={docHistory.canRedo}
           />
 
           {isCanvasReady ? (
