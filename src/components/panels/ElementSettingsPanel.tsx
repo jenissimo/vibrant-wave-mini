@@ -5,6 +5,9 @@ import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import BaseFloatingPanel from '@/components/panels/BaseFloatingPanel';
 import type { CanvasElementData } from '@/components/Canvas';
+import { commandManager } from '@/lib/commandManager';
+import { SliceElementCommand } from '@/lib/commands/SliceElementCommand';
+import { settingsStore } from '@/lib/settingsStore';
 
 interface ElementSettingsPanelProps {
   element: CanvasElementData;
@@ -18,6 +21,21 @@ const ElementSettingsPanel: React.FC<ElementSettingsPanelProps> = ({ element, on
     const v = parseFloat(e.target.value || '0');
     onChange({ [key]: isNaN(v) ? 0 : v } as Partial<CanvasElementData>);
   };
+
+  const handleSlice = () => {
+    const settings = settingsStore.getState().doc?.settings;
+    if (!settings || element.type !== 'image') return;
+    
+    const command = new SliceElementCommand(
+      element.id, 
+      settings.gridCols, 
+      settings.gridRows, 
+      settings.gridThickness
+    );
+    commandManager.execute(command);
+  };
+
+  const canSlice = element.type === 'image';
 
   return (
     <BaseFloatingPanel title="Element Settings" initialPosition={{ x: (typeof window !== 'undefined' ? window.innerWidth - 540 : 0), y: 12 }} className="w-72" storageKey="element-settings">
@@ -57,6 +75,15 @@ const ElementSettingsPanel: React.FC<ElementSettingsPanelProps> = ({ element, on
           </div>
           <div className="flex justify-between pt-1">
             <Button variant="secondary" size="sm" onClick={onDuplicate}>Duplicate</Button>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={handleSlice}
+              disabled={!canSlice}
+              title={!canSlice ? "Slice available only for images" : "Slice element by grid"}
+            >
+              Slice
+            </Button>
             <Button variant="destructive" size="sm" onClick={onDelete}>Delete</Button>
           </div>
         </div>

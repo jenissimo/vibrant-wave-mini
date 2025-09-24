@@ -25,6 +25,8 @@ import { UpdateSettingsCommand } from '@/lib/commands/UpdateSettingsCommand';
 import { UpdateElementCommand } from '@/lib/commands/UpdateElementCommand';
 import { AddElementCommand } from '@/lib/commands/AddElementCommand';
 import { CanvasElementData } from '@/components/Canvas';
+import { exportSliceAsImage, isSlice } from '@/lib/sliceUtils';
+import { insertImageToCanvas, getImageFromFile, isImageFile } from '@/lib/imageUtils';
 
 export default function Home() {
   const { data: session } = useSession();
@@ -93,7 +95,19 @@ export default function Home() {
     const x = (generationArea.width - w) / 2;
     const y = (generationArea.height - h) / 2;
     const id = `el_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
-    const newElement: CanvasElementData = { id, type: 'image', src: imageUrl, x, y, width: w, height: h, visible: true, locked: false };
+    const newElement: CanvasElementData = { 
+      id, 
+      type: 'image', 
+      src: imageUrl, 
+      x, 
+      y, 
+      width: w, 
+      height: h, 
+      originalWidth: img.width,
+      originalHeight: img.height,
+      visible: true, 
+      locked: false 
+    };
     commandManager.execute(new AddElementCommand(newElement));
     setSelectedElementId(id);
   };
@@ -114,9 +128,9 @@ export default function Home() {
   const { moveUp, moveDown, bringToFront, sendToBack } = zOrder;
 
   // Add element from references into canvas center
-  const addElementFromRef = (index: number, src: string) => {
+  const addElementFromRef = async (index: number, src: string) => {
     if (!src) return;
-    const id = addElementFromRefOp(src, generationArea);
+    const id = await addElementFromRefOp(src, generationArea);
     setSelectedElementId(id);
   };
 
@@ -132,7 +146,7 @@ export default function Home() {
     selectedElementId,
     elements,
     removeElement: (id) => { removeElement(id); if (selectedElementId === id) setSelectedElementId(null); },
-    addElement: (el) => addElementFromRefOp(el.src, el),
+    addElement: async (el) => await addElementFromRefOp(el.src, el),
     addReference: (src) => setReferences([...references, src]),
     setSelectedElementId,
     undo: docHistory.undo,
@@ -225,6 +239,24 @@ export default function Home() {
               onElementDragStart={(id) => onElementDragStart(id, elements)}
               onElementDragEnd={(id, finalPosition) => onElementDragEnd(id, finalPosition)}
               onElementNudge={() => {}}
+              onImageDrop={async (file, position) => {
+                if (!isImageFile(file)) return;
+                
+                try {
+                  const src = await getImageFromFile(file);
+                  const id = await insertImageToCanvas({
+                    src,
+                    name: file.name,
+                    targetArea: generationArea,
+                    maxSize: { width: generationArea.width, height: generationArea.height },
+                    offset: { x: position.x - generationArea.x, y: position.y - generationArea.y }
+                  }, (element) => {
+                    setSelectedElementId(element.id);
+                  });
+                } catch (err) {
+                  console.error('Failed to drop image:', err);
+                }
+              }}
             />
           ) : (
             <div className="flex items-center justify-center h-full">
@@ -303,38 +335,46 @@ export default function Home() {
             onMoveDown={moveDown}
             onBringToFront={bringToFront}
             onSendToBack={sendToBack}
-            onDownload={(id) => {
+            onDownload={async (id) => {
               const el = elements.find(e => e.id === id);
-              if (el && el.src) {
+              if (!el || !el.src) return;
+              
+              try {
+                let dataUrl: string;
+                if (isSlice(el)) {
+                  // Export slice as separate image
+                  dataUrl = await exportSliceAsImage(el);
+                } else {
+                  // Use original image
+                  dataUrl = el.src;
+                }
+                
                 const a = document.createElement('a');
-                a.href = el.src;
-                a.download = el.name || `element-${id}.png`;
+                a.href = dataUrl;
+                // Use element name without extension, or fallback to element ID
+                const downloadName = el.name || `element-${id}`;
+                a.download = `${downloadName}.png`;
                 a.click();
+              } catch (error) {
+                console.error('Failed to export element:', error);
               }
             }}
-            onImportImage={(file)=>{
-              const reader = new FileReader();
-              reader.onload = () => {
-                const src = String(reader.result || '');
-                const name = file.name;
-                // load image to compute aspect-fit size up to half of generation area
-                const img = new Image();
-                img.onload = () => {
-                  const maxW = generationArea.width * 0.5;
-                  const maxH = generationArea.height * 0.5;
-                  const ratio = Math.min(maxW / img.width, maxH / img.height, 1);
-                  const w = Math.max(1, img.width * ratio);
-                  const h = Math.max(1, img.height * ratio);
-                  const x = (generationArea.width - w) / 2;
-                  const y = (generationArea.height - h) / 2;
-                  const id = `el_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
-                  const newElement: CanvasElementData = { id, type: 'image', src, name, x, y, width: w, height: h, visible: true, locked: false };
-                  commandManager.execute(new AddElementCommand(newElement));
-                  setSelectedElementId(id);
-                };
-                img.src = src;
-              };
-              reader.readAsDataURL(file);
+            onImportImage={async (file) => {
+              if (!isImageFile(file)) return;
+              
+              try {
+                const src = await getImageFromFile(file);
+                const id = await insertImageToCanvas({
+                  src,
+                  name: file.name,
+                  targetArea: generationArea,
+                  maxSize: { width: generationArea.width, height: generationArea.height }
+                }, (element) => {
+                  setSelectedElementId(element.id);
+                });
+              } catch (err) {
+                console.error('Failed to import image:', err);
+              }
             }}
           />
         </div>

@@ -19,6 +19,13 @@ export interface CanvasElementData {
   y: number;
   width: number;
   height: number;
+  originalWidth?: number; // Original image width
+  originalHeight?: number; // Original image height
+  // Slice properties for cropped images
+  sliceX?: number; // X position in original image
+  sliceY?: number; // Y position in original image
+  sliceWidth?: number; // Width in original image
+  sliceHeight?: number; // Height in original image
   visible: boolean;
   locked: boolean;
   rotation?: number;
@@ -54,6 +61,9 @@ interface CanvasProps {
   onElementDragEnd?: (id: string, pos: { x: number; y: number }) => void;
   onElementNudge?: (id: string, position: { x: number; y: number }) => void;
   snapEnabled?: boolean;
+  
+  // drag-n-drop
+  onImageDrop?: (file: File, position: { x: number; y: number }) => void;
 }
 
 export interface CanvasRef {
@@ -89,6 +99,7 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
   onElementDragEnd,
   onElementNudge,
   snapEnabled,
+  onImageDrop,
 }, ref) => {
   const stageRef = useRef<Konva.Stage | null>(null);
   const contentLayerRef = useRef<Konva.Layer | null>(null);
@@ -232,6 +243,28 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
     }
   }, []);
 
+  // Drag-n-drop handlers
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    const files = Array.from(e.dataTransfer.files);
+    const imageFile = files.find(file => file.type.startsWith('image/'));
+    
+    if (imageFile && onImageDrop) {
+      const stage = stageRef.current;
+      if (stage) {
+        const rect = stage.container().getBoundingClientRect();
+        const x = (e.clientX - rect.left - stageX) / stageScale;
+        const y = (e.clientY - rect.top - stageY) / stageScale;
+        onImageDrop(imageFile, { x, y });
+      }
+    }
+  }, [onImageDrop, stageX, stageY, stageScale]);
+
   const renderGenerationGrid = () => (
     <GenerationGrid
       enabled={gridEnabled}
@@ -366,7 +399,12 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
   }, [onElementTransform, onElementTransformEnd, snapEnabled, snapRect]);
 
   return (
-    <div ref={containerRef} className="w-full h-full">
+    <div 
+      ref={containerRef} 
+      className="w-full h-full"
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
       <Stage
         ref={stageRef}
         width={width}

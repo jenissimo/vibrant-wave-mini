@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { ArrowDown, ArrowUp, ChevronsDown, ChevronsUp, Download, Eye, EyeOff, Trash2, Image as ImageIcon } from 'lucide-react';
 import type { CanvasElementData } from '@/components/Canvas';
 import BaseFloatingPanel from '@/components/panels/BaseFloatingPanel';
+import { getSliceInfo } from '@/lib/sliceUtils';
 
 // Panel sizing defaults (px)
 const LAYERS_PANEL_WIDTH = 384; // matches w-128 (32rem)
@@ -72,7 +73,7 @@ const LayersPanel: React.FC<LayersPanelProps> = ({
             </div>
             <div className="flex-1 min-w-0">
               <div className="text-xs text-foreground truncate">{el.name || `${el.type} ${el.id.slice(0,4)}`}</div>
-              <div className="text-[10px] text-muted-foreground">{Math.round(el.x)},{Math.round(el.y)} · {Math.round(el.width)}×{Math.round(el.height)}</div>
+              <div className="text-[10px] text-muted-foreground">{Math.round(el.x)},{Math.round(el.y)} · {getSliceInfo(el)}</div>
             </div>
             <div className="flex items-center gap-1">
               <Button

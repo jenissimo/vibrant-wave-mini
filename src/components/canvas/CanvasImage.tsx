@@ -21,6 +21,10 @@ interface CanvasImageProps {
 export default function CanvasImage(props: CanvasImageProps) {
   const { data, isSelected, draggable, onSelect, onDragStart, onDragEnd, onDragMove, onTransformStart, onTransformMove, onTransformEnd, registerNodeRef, dragBoundFunc } = props;
   const image = useHTMLImage(data.src) as HTMLImageElement | null;
+  
+  // Check if this is a slice (has slice coordinates)
+  const isSlice = data.sliceX !== undefined && data.sliceY !== undefined && data.sliceWidth !== undefined && data.sliceHeight !== undefined;
+  
   return (
     <>
       <KonvaImage
@@ -66,6 +70,17 @@ export default function CanvasImage(props: CanvasImageProps) {
           });
         }}
         listening={true}
+        // Crop properties for slices
+        crop={isSlice ? {
+          x: data.sliceX!,
+          y: data.sliceY!,
+          width: data.sliceWidth!,
+          height: data.sliceHeight!,
+        } : undefined}
+        cropX={isSlice ? data.sliceX! : undefined}
+        cropY={isSlice ? data.sliceY! : undefined}
+        cropWidth={isSlice ? data.sliceWidth! : undefined}
+        cropHeight={isSlice ? data.sliceHeight! : undefined}
       />
     </>
   );

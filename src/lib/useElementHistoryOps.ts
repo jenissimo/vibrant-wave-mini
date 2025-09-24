@@ -60,13 +60,40 @@ export function useElementHistoryOps() {
     sendToBack: (id: string) => commandManager.execute(new ZOrderCommand(id, 'sendToBack')),
   };
 
-  const addElementFromRef = (src: string, generationArea: { x: number; y: number; width: number; height: number }) => {
+  const addElementFromRef = async (src: string, generationArea: { x: number; y: number; width: number; height: number }) => {
     const id = `el_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
-    const w = Math.min(512, generationArea.width * 0.5);
-    const h = Math.min(512, generationArea.height * 0.5);
+    
+    // Load image to get original dimensions
+    const img = new Image();
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error('Failed to load image'));
+      img.src = src;
+    });
+    
+    const ratio = Math.min(
+      generationArea.width / Math.max(1, img.width),
+      generationArea.height / Math.max(1, img.height),
+      1
+    );
+    const w = Math.max(1, img.width * ratio);
+    const h = Math.max(1, img.height * ratio);
     const x = (generationArea.width - w) / 2;
     const y = (generationArea.height - h) / 2;
-    const newElement: CanvasElementData = { id, type: 'image', src, x, y, width: w, height: h, visible: true, locked: false };
+    
+    const newElement: CanvasElementData = { 
+      id, 
+      type: 'image', 
+      src, 
+      x, 
+      y, 
+      width: w, 
+      height: h, 
+      originalWidth: img.width,
+      originalHeight: img.height,
+      visible: true, 
+      locked: false 
+    };
     commandManager.execute(new AddElementCommand(newElement));
     return id;
   };
