@@ -90,50 +90,83 @@ export async function POST(req: NextRequest) {
     // Generate multiple variants in parallel with retry logic
     const variantCountNum = Math.min(Math.max(1, Number(variantCount) || 1), 4);
     
-    const makeRequest = async (): Promise<Response> => {
-      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
-      });
+    const makeRequest = async (): Promise<{ response: Response; data: any }> => {
+      const MAX_RETRIES = 3;
+      let lastError: Error | null = null;
       
-      // Retry once if request failed
-      if (!response.ok) {
-        console.warn(`Request failed with status ${response.status}, retrying...`);
-        const retryResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(body),
-        });
-        return retryResponse;
+      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        try {
+          const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(body),
+          });
+          
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`HTTP ${response.status}: ${errorText}`);
+          }
+          
+          const data = await response.json();
+          
+          // Check if response has valid image data
+          const hasValidImage = data?.choices?.length && 
+            data.choices[0]?.message?.images?.length &&
+            data.choices[0].message.images[0]?.image_url?.url;
+          
+          if (hasValidImage) {
+            return { response, data };
+          }
+          
+          // If no valid image, treat as error for retry
+          throw new Error('No valid image in response');
+          
+        } catch (error) {
+          lastError = error instanceof Error ? error : new Error('Unknown error');
+          console.warn(`Attempt ${attempt}/${MAX_RETRIES} failed:`, lastError.message);
+          
+          if (attempt < MAX_RETRIES) {
+            // Wait before retry (exponential backoff)
+            const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+            await new Promise(resolve => setTimeout(resolve, delay));
+          }
+        }
       }
       
-      return response;
+      throw lastError || new Error('All retry attempts failed');
     };
 
     const requests = Array.from({ length: variantCountNum }, () => makeRequest());
-    const responses = await Promise.all(requests);
+    const results = await Promise.allSettled(requests);
     
-    // Check if any request failed after retry
-    const failedResponse = responses.find(res => !res.ok);
-    if (failedResponse) {
-      const text = await failedResponse.text();
-      return NextResponse.json({ error: text || `Upstream error ${failedResponse.status}` }, { status: 502 });
+    // Extract successful responses only
+    const successfulResults = results
+      .filter((result): result is PromiseFulfilledResult<{ response: Response; data: any }> => 
+        result.status === 'fulfilled')
+      .map(result => result.value);
+    
+    // Check if we have at least one successful result
+    if (successfulResults.length === 0) {
+      const failedResults = results.filter((result): result is PromiseRejectedResult => 
+        result.status === 'rejected');
+      const lastError = failedResults[failedResults.length - 1]?.reason;
+      throw lastError || new Error('All variant generation attempts failed');
     }
-
-    // Parse all responses
-    const results = await Promise.all(responses.map(res => res.json()));
+    
+    // Log partial success
+    if (successfulResults.length < variantCountNum) {
+      console.warn(`Generated ${successfulResults.length}/${variantCountNum} variants successfully`);
+    }
+    
+    const dataResults = successfulResults.map(result => result.data);
     
     const variants: Array<{ image: string | null; text: string | null }> = [];
     let combinedText: string | null = null;
 
-    for (const data of results) {
+    for (const data of dataResults) {
       let image: string | null = null;
       let text: string | null = null;
 
