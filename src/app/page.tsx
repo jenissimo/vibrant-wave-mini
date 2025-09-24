@@ -244,7 +244,7 @@ export default function Home() {
                 
                 try {
                   const src = await getImageFromFile(file);
-                  const id = await insertImageToCanvas({
+                  await insertImageToCanvas({
                     src,
                     name: file.name,
                     targetArea: generationArea,
@@ -364,7 +364,7 @@ export default function Home() {
               
               try {
                 const src = await getImageFromFile(file);
-                const id = await insertImageToCanvas({
+                await insertImageToCanvas({
                   src,
                   name: file.name,
                   targetArea: generationArea,

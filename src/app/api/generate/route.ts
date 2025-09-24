@@ -1,6 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import sharp from 'sharp';
 
+interface OpenRouterResponse {
+  choices?: Array<{
+    message?: {
+      content?: string;
+      images?: Array<{
+        image_url?: {
+          url?: string;
+        };
+      }>;
+    };
+  }>;
+}
+
 // Resize image to fit within 1024x1024 total pixels while maintaining aspect ratio
 async function resizeImageForLLM(dataUrl: string): Promise<string> {
   try {
@@ -90,7 +103,7 @@ export async function POST(req: NextRequest) {
     // Generate multiple variants in parallel with retry logic
     const variantCountNum = Math.min(Math.max(1, Number(variantCount) || 1), 4);
     
-    const makeRequest = async (): Promise<{ response: Response; data: any }> => {
+    const makeRequest = async (): Promise<{ response: Response; data: OpenRouterResponse }> => {
       const MAX_RETRIES = 3;
       let lastError: Error | null = null;
       
@@ -110,7 +123,7 @@ export async function POST(req: NextRequest) {
             throw new Error(`HTTP ${response.status}: ${errorText}`);
           }
           
-          const data = await response.json();
+          const data = await response.json() as OpenRouterResponse;
           
           // Check if response has valid image data
           const hasValidImage = data?.choices?.length && 
@@ -144,7 +157,7 @@ export async function POST(req: NextRequest) {
     
     // Extract successful responses only
     const successfulResults = results
-      .filter((result): result is PromiseFulfilledResult<{ response: Response; data: any }> => 
+      .filter((result): result is PromiseFulfilledResult<{ response: Response; data: OpenRouterResponse }> => 
         result.status === 'fulfilled')
       .map(result => result.value);
     

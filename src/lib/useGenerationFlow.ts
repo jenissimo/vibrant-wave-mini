@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 
 type Variant = { image: string | null; text: string | null };
 
@@ -29,10 +29,7 @@ export function useGenerationFlow() {
     setGenerationProgress(0);
 
     const startTime = Date.now();
-    let isMinDurationReached = false;
     const progressInterval = setInterval(() => {
-      const elapsed = Date.now() - startTime;
-      isMinDurationReached = elapsed >= MIN_SIMULATION_DURATION;
       setGenerationProgress(prev => {
         if (prev >= PROGRESS_PAUSE_AT) return prev;
         const step = PROGRESS_STEP_MIN + Math.random() * (PROGRESS_STEP_MAX - PROGRESS_STEP_MIN);
