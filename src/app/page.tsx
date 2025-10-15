@@ -73,7 +73,7 @@ export default function Home() {
     if (!base64) return;
     await gen.handleGenerate({
       variantCount,
-      payload: { prompt, canvas: base64, attachments: references },
+      payload: { prompt, canvas: base64, attachments: references, aspectRatio: settings.aspectRatio },
       onSingleVariant: async (imageUrl) => { await addVariantToCanvas(imageUrl); },
     });
   };

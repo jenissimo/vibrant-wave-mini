@@ -37,7 +37,8 @@ const GenerationSettingsPanel: React.FC<GenerationSettingsPanelProps> = (props) 
   } = props;
 
   const [gridOpen, setGridOpen] = React.useState(true);
-  const presets = ['1:1', '2:1', '1:2' ,'4:3','3:4','16:9','9:16'];
+  // Supported aspect ratios for OpenRouter/Gemini image generation
+  const presets = ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'];
   const isPreset = presets.includes(aspectRatio);
   const selectValue = isPreset ? aspectRatio : 'custom';
 

@@ -57,7 +57,7 @@ async function resizeImageForLLM(dataUrl: string): Promise<string> {
 
 export async function POST(req: NextRequest) {
   try {
-    const { prompt, canvas, attachments, model, variantCount = 1 } = await req.json();
+    const { prompt, canvas, attachments, model, variantCount = 1, aspectRatio = '1:1' } = await req.json();
 
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
@@ -98,6 +98,9 @@ export async function POST(req: NextRequest) {
         },
       ],
       modalities: ['image', 'text'],
+      image_config: {
+        aspect_ratio: aspectRatio,
+      },
     };
 
     // Generate multiple variants in parallel with retry logic

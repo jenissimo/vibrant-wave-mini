@@ -1,5 +1,6 @@
 Version 2:
 [x] Auto-slicing for multiple frames
+[x] Aspect ratio migration to OpenRouter API (image_config support)
 [ ] Selection (drag selection + shift/ctrl select)
 [ ] Text tool with text layer type
 [ ] Draw tool (with drawing layer type)

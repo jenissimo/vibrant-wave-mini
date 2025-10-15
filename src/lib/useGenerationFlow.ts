@@ -17,7 +17,7 @@ export function useGenerationFlow() {
 
   const handleGenerate = useCallback(async (args: {
     variantCount: number;
-    payload: { prompt: string; canvas: string; attachments: string[] };
+    payload: { prompt: string; canvas: string; attachments: string[]; aspectRatio?: string };
     onSingleVariant: (imageUrl: string) => Promise<void>;
   }) => {
     if (isGenerating) return;
