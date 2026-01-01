@@ -117,7 +117,7 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
   
   const { dataUrl: patternDataUrl, tile } = usePatternDots(themeColors.background);
 
-  const { generationAreaAligned, snapPosition, snapRect } = useCanvasSnapping({
+  const { generationAreaAligned, snapWorldPosition, snapAbsolutePosition, snapRect } = useCanvasSnapping({
     generationArea,
     tile,
     stageX,
@@ -260,7 +260,8 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
         const rect = stage.container().getBoundingClientRect();
         const x = (e.clientX - rect.left - stageX) / stageScale;
         const y = (e.clientY - rect.top - stageY) / stageScale;
-        onImageDrop(imageFile, { x, y });
+        const pos = snapEnabled ? snapWorldPosition({ x, y }) : { x, y };
+        onImageDrop(imageFile, pos);
       }
     }
   }, [onImageDrop, stageX, stageY, stageScale]);
@@ -337,13 +338,14 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
       const key = e.key;
       if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(key)) return;
       e.preventDefault();
-      const baseStep = tile / 2; // distance between dots (8 -> 24 within 32 tile)
-      const step = baseStep / Math.max(0.0001, stageScale);
+      
+      const snapStep = tile / 2;
       let dx = 0, dy = 0;
-      if (key === 'ArrowUp') dy = -step;
-      if (key === 'ArrowDown') dy = step;
-      if (key === 'ArrowLeft') dx = -step;
-      if (key === 'ArrowRight') dx = step;
+      if (key === 'ArrowUp') dy = -snapStep;
+      if (key === 'ArrowDown') dy = snapStep;
+      if (key === 'ArrowLeft') dx = -snapStep;
+      if (key === 'ArrowRight') dx = snapStep;
+
       if (onElementNudge) {
         onElementNudge(el.id, { x: el.x + dx, y: el.y + dy });
       } else {
@@ -452,12 +454,15 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
                 data={el}
                 isSelected={selectedElementId === el.id}
                 draggable={interactionMode === 'select' && !el.locked}
-                dragBoundFunc={snapEnabled ? (pos) => snapPosition(pos, { width: el.width, height: el.height }) : undefined}
+                dragBoundFunc={snapEnabled ? (pos) => snapAbsolutePosition(pos) : undefined}
                 onSelect={() => onSelectElement(el.id)}
-                onDragStart={() => onElementDragStart?.(el.id)}
+                onDragStart={() => {
+                  onSelectElement(el.id);
+                  onElementDragStart?.(el.id);
+                }}
                 onDragEnd={(pos) => {
                   if (onElementDragEnd) {
-                    const snappedPos = snapEnabled ? snapPosition(pos) : pos;
+                    const snappedPos = snapEnabled ? snapWorldPosition(pos) : pos;
                     onElementDragEnd(el.id, snappedPos);
                   }
                 }}

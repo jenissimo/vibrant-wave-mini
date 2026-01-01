@@ -1,5 +1,5 @@
 import React from 'react';
-import { Hand, MousePointer, Download, Sun, Moon, Monitor, LogOut, Undo, Redo } from 'lucide-react';
+import { Hand, MousePointer, Download, Sun, Moon, Monitor, LogOut, Undo, Redo, Save, FolderOpen, FolderKanban } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -19,6 +19,9 @@ interface CanvasTopToolbarProps {
   onRedo?: () => void;
   canUndo?: boolean;
   canRedo?: boolean;
+  onSaveBoard?: () => void;
+  onLoadBoard?: () => void;
+  onOpenBoards?: () => void;
 }
 
 const CanvasTopToolbar: React.FC<CanvasTopToolbarProps> = ({ 
@@ -35,7 +38,10 @@ const CanvasTopToolbar: React.FC<CanvasTopToolbarProps> = ({
   onUndo,
   onRedo,
   canUndo,
-  canRedo
+  canRedo,
+  onSaveBoard,
+  onLoadBoard,
+  onOpenBoards,
 }) => {
   return (
     <div className="absolute top-3 left-3 z-10 flex items-center gap-2 canvas-toolbar backdrop-blur shadow-sm rounded-md px-2 py-1">
@@ -71,6 +77,16 @@ const CanvasTopToolbar: React.FC<CanvasTopToolbarProps> = ({
       </Button>
       <Button variant="ghost" size="icon" onClick={onDownload} title="Download PNG">
         <Download size={16} />
+      </Button>
+      <div className="w-px h-5 bg-border mx-1" />
+      <Button variant="ghost" size="icon" onClick={onSaveBoard} title="Save Board (.wv)">
+        <Save size={16} />
+      </Button>
+      <Button variant="ghost" size="icon" onClick={onLoadBoard} title="Load Board (.wv)">
+        <FolderOpen size={16} />
+      </Button>
+      <Button variant="ghost" size="icon" onClick={onOpenBoards} title="Boards">
+        <FolderKanban size={16} />
       </Button>
       {showSignOut && (
         <>

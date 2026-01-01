@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight, Check, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Check, X, Layers } from 'lucide-react';
 
 interface Variant {
   image: string | null;
@@ -10,10 +10,11 @@ interface Variant {
 interface VariantSwitcherProps {
   variants: Variant[];
   onAccept: (variant: Variant) => void;
+  onAcceptAll?: (variants: Variant[]) => void;
   onCancel: () => void;
 }
 
-const VariantSwitcher: React.FC<VariantSwitcherProps> = ({ variants, onAccept, onCancel }) => {
+const VariantSwitcher: React.FC<VariantSwitcherProps> = ({ variants, onAccept, onAcceptAll, onCancel }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   
   if (!variants.length) return null;
@@ -119,6 +120,16 @@ const VariantSwitcher: React.FC<VariantSwitcherProps> = ({ variants, onAccept, o
           <Button variant="outline" onClick={onCancel}>
             Cancel
           </Button>
+          {hasMultiple && onAcceptAll && (
+            <Button 
+              variant="secondary" 
+              onClick={() => onAcceptAll(variants)}
+              disabled={!variants.some(v => v.image)}
+            >
+              <Layers className="w-4 h-4 mr-2" />
+              Take All
+            </Button>
+          )}
           <Button onClick={handleAccept} disabled={!currentVariant.image}>
             <Check className="w-4 h-4 mr-2" />
             Use This Variant
