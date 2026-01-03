@@ -150,13 +150,38 @@ Any Next.js-compatible host works (Vercel recommended).
 - Ensure serverless runtime can fetch `https://openrouter.ai/api/v1/chat/completions`.
 
 ### Optional Authentication
-The app supports optional authentication via NextAuth:
+The app supports optional authentication via NextAuth with two modes:
+
+#### Mode 1: OIDC (Authelia) - Recommended for production
+When OIDC variables are configured, the app uses OIDC authentication and automatically redirects to the identity provider. Credentials authentication is disabled in this mode.
+
+Required variables:
+- `OIDC_ISSUER_URL` - Your OIDC provider's issuer URL (e.g., `https://idp.lofters.ru`)
+- `OIDC_CLIENT_ID` - OIDC client ID
+- `OIDC_CLIENT_SECRET` - OIDC client secret
+- `OIDC_LOGOUT_URI` - OIDC logout endpoint (e.g., `https://idp.lofters.ru/logout`)
+
+#### Mode 2: Credentials (Username/Password)
+When OIDC is not configured, the app falls back to simple username/password authentication:
 - Set `AUTH_ENABLED=true` to enable authentication
 - Configure `AUTH_USER` and `AUTH_PASSWORD` for login credentials
-- Set `NEXTAUTH_URL` to your production domain
-- Generate a secure `NEXTAUTH_SECRET` (e.g., `openssl rand -base64 32`)
 
-Example production `.env`:
+#### Common Authentication Variables
+- `NEXTAUTH_URL` - Your application URL (e.g., `https://your-domain.com` or `http://localhost:3000`)
+- `NEXTAUTH_SECRET` - Generate a secure secret (e.g., `openssl rand -base64 32`)
+
+Example production `.env` with OIDC:
+```env
+OPENROUTER_API_KEY=sk-or-your-key-here
+NEXTAUTH_URL=https://your-domain.com
+NEXTAUTH_SECRET=your-generated-secret
+OIDC_ISSUER_URL=https://idp.your-domain.ru
+OIDC_CLIENT_ID=your-client-id
+OIDC_CLIENT_SECRET=your-client-secret
+OIDC_LOGOUT_URI=https://idp.your-domain.ru/logout
+```
+
+Example production `.env` with credentials:
 ```env
 OPENROUTER_API_KEY=sk-or-your-key-here
 AUTH_ENABLED=true
@@ -165,6 +190,9 @@ AUTH_PASSWORD=your-secure-password
 NEXTAUTH_URL=https://your-domain.com
 NEXTAUTH_SECRET=your-generated-secret
 ```
+
+#### Docker Compose
+When using Docker Compose, all authentication variables are automatically passed from your `.env` file to the container. See `docker-compose.yml` for the complete list of supported environment variables.
 
 ---
 

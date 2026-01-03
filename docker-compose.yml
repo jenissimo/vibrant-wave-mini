@@ -15,6 +15,10 @@ services:
       - AUTH_PASSWORD=${AUTH_PASSWORD:-password123}
       - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - OIDC_ISSUER_URL=${OIDC_ISSUER_URL}
+      - OIDC_CLIENT_ID=${OIDC_CLIENT_ID}
+      - OIDC_CLIENT_SECRET=${OIDC_CLIENT_SECRET}
+      - OIDC_LOGOUT_URI=${OIDC_LOGOUT_URI}
     volumes:
       - .:/app
       - /app/node_modules

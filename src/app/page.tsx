@@ -2,7 +2,6 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useSession, signOut } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
 import Canvas, { CanvasRef } from '@/components/Canvas';
 import CanvasTopToolbar from '@/components/CanvasTopToolbar';
 import CanvasBottomZoom from '@/components/CanvasBottomZoom';
@@ -42,7 +41,6 @@ import { exportBoardToWv, importBoardFromWv } from '@/lib/boardFileFormat';
 
 export default function Home() {
   const { data: session } = useSession();
-  const router = useRouter();
   const initialSettings: DocSettings = {
     aspectRatio: '1:1',
     gridEnabled: false,
@@ -138,6 +136,26 @@ export default function Home() {
       await addVariantToCanvas(variant.image);
     }
     gen.setGeneratedVariants(null);
+  };
+
+  const handleSignOut = async () => {
+    // Check if OIDC logout URI is configured
+    try {
+      const configRes = await fetch('/api/auth/config');
+      const config = await configRes.json();
+      
+      if (config.oidcEnabled && config.oidcLogoutUri) {
+        // Sign out locally first, then redirect to OIDC logout
+        await signOut({ redirect: false });
+        window.location.href = config.oidcLogoutUri;
+      } else {
+        // Standard logout
+        await signOut({ callbackUrl: '/login' });
+      }
+    } catch {
+      // Fallback to standard logout
+      await signOut({ callbackUrl: '/login' });
+    }
   };
 
   const handleAcceptAllVariants = async (variants: Array<{ image: string | null; text: string | null }>) => {
@@ -492,7 +510,7 @@ export default function Home() {
               a.download = 'generation.png';
               a.click();
             }}
-            onSignOut={() => signOut()}
+            onSignOut={handleSignOut}
             showSignOut={!!session}
             onUndo={docHistory.undo}
             onRedo={docHistory.redo}
