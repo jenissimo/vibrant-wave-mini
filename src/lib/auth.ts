@@ -24,6 +24,10 @@ const isOIDCConfigured = () => {
 // Create OIDC provider configuration
 const createOIDCProvider = (): OAuthConfig<OIDCProfile> => {
   const issuer = process.env.OIDC_ISSUER_URL!;
+  // Allow override of token endpoint auth method via env var
+  // Options: 'client_secret_basic' (default, recommended for Authelia) or 'client_secret_post'
+  const tokenEndpointAuthMethod = (process.env.OIDC_TOKEN_ENDPOINT_AUTH_METHOD as 'client_secret_post' | 'client_secret_basic') || 'client_secret_basic';
+  
   return {
     id: 'oidc',
     name: 'OIDC',
@@ -34,6 +38,10 @@ const createOIDCProvider = (): OAuthConfig<OIDCProfile> => {
     clientSecret: process.env.OIDC_CLIENT_SECRET!,
     checks: ['pkce', 'state'],
     idToken: true,
+    // Explicitly set client authentication method
+    client: {
+      token_endpoint_auth_method: tokenEndpointAuthMethod,
+    },
     authorization: {
       params: {
         scope: 'openid email profile',

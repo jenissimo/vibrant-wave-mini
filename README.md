@@ -158,8 +158,11 @@ When OIDC variables are configured, the app uses OIDC authentication and automat
 Required variables:
 - `OIDC_ISSUER_URL` - Your OIDC provider's issuer URL (e.g., `https://idp.lofters.ru`)
 - `OIDC_CLIENT_ID` - OIDC client ID
-- `OIDC_CLIENT_SECRET` - OIDC client secret
+- `OIDC_CLIENT_SECRET` - OIDC client secret (plain text, not the hashed value from Authelia config)
 - `OIDC_LOGOUT_URI` - OIDC logout endpoint (e.g., `https://idp.lofters.ru/logout`)
+
+Optional variables:
+- `OIDC_TOKEN_ENDPOINT_AUTH_METHOD` - Token endpoint authentication method. Default: `client_secret_basic` (recommended for Authelia). Alternative: `client_secret_post`. Must match the `token_endpoint_auth_method` setting in your Authelia client configuration.
 
 #### Mode 2: Credentials (Username/Password)
 When OIDC is not configured, the app falls back to simple username/password authentication:
@@ -177,9 +180,12 @@ NEXTAUTH_URL=https://your-domain.com
 NEXTAUTH_SECRET=your-generated-secret
 OIDC_ISSUER_URL=https://idp.your-domain.ru
 OIDC_CLIENT_ID=your-client-id
-OIDC_CLIENT_SECRET=your-client-secret
+OIDC_CLIENT_SECRET=your-plain-text-client-secret
 OIDC_LOGOUT_URI=https://idp.your-domain.ru/logout
+# OIDC_TOKEN_ENDPOINT_AUTH_METHOD=client_secret_basic  # optional, default is client_secret_basic
 ```
+
+**Important**: The `OIDC_CLIENT_SECRET` must be the plain text secret (the original value before hashing), not the Argon2id hash shown in Authelia's configuration file. Authelia will verify the plain text secret against the stored hash.
 
 Example production `.env` with credentials:
 ```env
@@ -202,6 +208,11 @@ When using Docker Compose, all authentication variables are automatically passed
 - **Empty variants**: check model quota and ensure input images are valid data URLs
 - **Canvas not loading**: check browser console for Konva/React-Konva errors
 - **Hotkeys not working**: ensure focus is on canvas, not input fields
+- **OIDC authentication failed**: 
+  - Verify `OIDC_CLIENT_SECRET` is the plain text secret (not the Argon2id hash)
+  - Ensure `OIDC_TOKEN_ENDPOINT_AUTH_METHOD` matches your Authelia client configuration (`client_secret_basic` or `client_secret_post`)
+  - Check that `OIDC_CLIENT_ID` matches exactly (case-sensitive)
+  - Verify the callback URL in Authelia: `https://your-domain.com/api/auth/callback/oidc`
 
 ---
 
