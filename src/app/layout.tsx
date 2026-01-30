@@ -1,17 +1,8 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { SessionProvider } from '@/components/SessionProvider';
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+// Fonts: use CSS variables from globals.css to avoid Turbopack next/font resolution bug
 
 export const metadata: Metadata = {
   title: "Vibrant Wave Editor",
@@ -43,9 +34,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
+      <body className="antialiased">
         <SessionProvider>
           {children}
         </SessionProvider>

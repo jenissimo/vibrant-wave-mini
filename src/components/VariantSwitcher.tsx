@@ -36,7 +36,7 @@ const VariantSwitcher: React.FC<VariantSwitcherProps> = ({ variants, onAccept, o
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-background border border-border rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+      <div className="bg-background border border-border rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border">
           <div className="flex items-center gap-2">
@@ -52,68 +52,71 @@ const VariantSwitcher: React.FC<VariantSwitcherProps> = ({ variants, onAccept, o
           </Button>
         </div>
         
-        {/* Image Display */}
-        <div className="relative p-4">
-          <div className="relative">
-            {currentVariant.image ? (
-              <img
-                src={currentVariant.image}
-                alt={`Variant ${currentIndex + 1}`}
-                className="w-full h-auto max-h-[60vh] object-contain rounded"
-              />
-            ) : (
-              <div className="flex items-center justify-center h-64 text-muted-foreground">
-                No image generated
+        {/* Content Area */}
+        <div className="flex-1 overflow-y-auto">
+          {/* Image Display */}
+          <div className="relative p-4">
+            <div className="relative">
+              {currentVariant.image ? (
+                <img
+                  src={currentVariant.image}
+                  alt={`Variant ${currentIndex + 1}`}
+                  className="w-full h-auto max-h-[60vh] object-contain rounded"
+                />
+              ) : (
+                <div className="flex items-center justify-center h-64 text-muted-foreground">
+                  No image generated
+                </div>
+              )}
+                
+                {/* Navigation arrows - always show for multiple variants */}
+                {hasMultiple && (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="absolute left-2 top-1/2 -translate-y-1/2 bg-background/80 hover:bg-background"
+                      onClick={prevVariant}
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 bg-background/80 hover:bg-background"
+                      onClick={nextVariant}
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </Button>
+                  </>
+                )}
+              </div>
+              
+              {/* Variant dots indicator */}
+              {hasMultiple && (
+                <div className="flex justify-center gap-2 mt-4">
+                  {variants.map((_, index) => (
+                    <button
+                      key={index}
+                      className={`w-2 h-2 rounded-full transition-colors ${
+                        index === currentIndex ? 'bg-primary' : 'bg-muted-foreground/30'
+                      }`}
+                      onClick={() => setCurrentIndex(index)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+            
+            {/* Text content */}
+            {currentVariant.text && (
+              <div className="p-4 border-t border-border">
+                <div className="text-sm text-muted-foreground whitespace-pre-wrap">
+                  {currentVariant.text}
+                </div>
               </div>
             )}
-            
-            {/* Navigation arrows - always show for multiple variants */}
-            {hasMultiple && (
-              <>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="absolute left-2 top-1/2 -translate-y-1/2 bg-background/80 hover:bg-background"
-                  onClick={prevVariant}
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 bg-background/80 hover:bg-background"
-                  onClick={nextVariant}
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </Button>
-              </>
-            )}
-          </div>
-          
-          {/* Variant dots indicator */}
-          {hasMultiple && (
-            <div className="flex justify-center gap-2 mt-4">
-              {variants.map((_, index) => (
-                <button
-                  key={index}
-                  className={`w-2 h-2 rounded-full transition-colors ${
-                    index === currentIndex ? 'bg-primary' : 'bg-muted-foreground/30'
-                  }`}
-                  onClick={() => setCurrentIndex(index)}
-                />
-              ))}
-            </div>
-          )}
         </div>
-        
-        {/* Text content */}
-        {currentVariant.text && (
-          <div className="p-4 border-t border-border">
-            <div className="text-sm text-muted-foreground whitespace-pre-wrap">
-              {currentVariant.text}
-            </div>
-          </div>
-        )}
         
         {/* Actions */}
         <div className="flex items-center justify-end gap-2 p-4 border-t border-border">
