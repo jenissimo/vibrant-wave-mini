@@ -10,6 +10,7 @@ export interface SessionData {
   docState: DocState;
   updatedAt: number;
   createdAt: number;
+  name?: string;
 }
 
 export interface SessionMetadata {
@@ -17,6 +18,7 @@ export interface SessionMetadata {
   updatedAt: number;
   createdAt: number;
   elementCount: number;
+  name?: string;
 }
 
 let dbInstance: IDBDatabase | null = null;
@@ -50,7 +52,7 @@ export function generateSessionId(): string {
 }
 
 // Save session to IndexedDB
-export async function saveSession(sessionId: string, docState: DocState): Promise<void> {
+export async function saveSession(sessionId: string, docState: DocState, name?: string): Promise<void> {
   if (typeof window === 'undefined') return;
 
   try {
@@ -71,6 +73,7 @@ export async function saveSession(sessionId: string, docState: DocState): Promis
       docState,
       updatedAt: now,
       createdAt: existing?.createdAt || now,
+      name: name ?? existing?.name,
     };
 
     await new Promise<void>((resolve, reject) => {
@@ -153,6 +156,7 @@ export async function getAllSessions(): Promise<SessionMetadata[]> {
           updatedAt: session.updatedAt,
           createdAt: session.createdAt,
           elementCount: session.docState.elements.length,
+          name: session.name,
         }));
         // Sort by updatedAt descending (most recent first)
         sessions.sort((a, b) => b.updatedAt - a.updatedAt);
@@ -182,6 +186,37 @@ export async function deleteSession(sessionId: string): Promise<void> {
     });
   } catch (error) {
     console.error('Failed to delete session:', error);
+    throw error;
+  }
+}
+
+// Rename session
+export async function renameSession(sessionId: string, name: string): Promise<void> {
+  if (typeof window === 'undefined') return;
+
+  try {
+    const db = await initDB();
+    const transaction = db.transaction([STORE_NAME], 'readwrite');
+    const store = transaction.objectStore(STORE_NAME);
+
+    const existing = await new Promise<SessionData | undefined>((resolve) => {
+      const request = store.get(sessionId);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => resolve(undefined);
+    });
+
+    if (!existing) return;
+
+    existing.name = name;
+    existing.updatedAt = Date.now();
+
+    await new Promise<void>((resolve, reject) => {
+      const request = store.put(existing);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  } catch (error) {
+    console.error('Failed to rename session:', error);
     throw error;
   }
 }

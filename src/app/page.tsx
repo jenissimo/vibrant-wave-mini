@@ -28,11 +28,12 @@ import { AddElementCommand } from '@/lib/commands/AddElementCommand';
 import { CanvasElementData } from '@/components/Canvas';
 import { exportSliceAsImage, isSlice } from '@/lib/sliceUtils';
 import { insertImageToCanvas, getImageFromFile, isImageFile } from '@/lib/imageUtils';
-import { 
-  generateSessionId, 
-  saveSession, 
-  loadSession, 
+import {
+  generateSessionId,
+  saveSession,
+  loadSession,
   getLastSession,
+  getAllSessions,
   initializeChannel,
   checkActiveTabs,
   startHeartbeat,
@@ -289,10 +290,15 @@ export default function Home() {
     sessionInitializedRef.current = true;
 
     const initializeSession = async () => {
+      const getDefaultBoardName = async () => {
+        const existing = await getAllSessions();
+        return `Board ${existing.length + 1}`;
+      };
+
       // Get sessionId from URL
       const urlParams = new URLSearchParams(window.location.search);
       const urlSessionId = urlParams.get('session');
-      
+
       if (urlSessionId) {
         // Try to load session from IndexedDB
         const sessionData = await loadSession(urlSessionId);
@@ -303,7 +309,7 @@ export default function Home() {
         } else {
           // Session not found, create new one with this ID
           setSessionId(urlSessionId);
-          await saveSession(urlSessionId, docHistory.present);
+          await saveSession(urlSessionId, docHistory.present, await getDefaultBoardName());
         }
       } else {
         // No sessionId in URL, determine which session to use
@@ -320,7 +326,7 @@ export default function Home() {
             const newSessionId = generateSessionId();
             setSessionId(newSessionId);
             updateSessionUrl(newSessionId);
-            await saveSession(newSessionId, docHistory.present);
+            await saveSession(newSessionId, docHistory.present, await getDefaultBoardName());
           } else {
             // No active tabs, load last session
             const lastSession = await getLastSession();
@@ -333,7 +339,7 @@ export default function Home() {
               const newSessionId = generateSessionId();
               setSessionId(newSessionId);
               updateSessionUrl(newSessionId);
-              await saveSession(newSessionId, docHistory.present);
+              await saveSession(newSessionId, docHistory.present, await getDefaultBoardName());
             }
           }
         } else {
@@ -341,7 +347,7 @@ export default function Home() {
           const newSessionId = generateSessionId();
           setSessionId(newSessionId);
           updateSessionUrl(newSessionId);
-          await saveSession(newSessionId, docHistory.present);
+          await saveSession(newSessionId, docHistory.present, await getDefaultBoardName());
         }
       }
     };
@@ -454,6 +460,28 @@ export default function Home() {
     } catch (error) {
       console.error('Failed to load board from session:', error);
     }
+  }, [docHistory, updateSessionUrl]);
+
+  const handleCreateNewBoard = useCallback(async () => {
+    const newSessionId = generateSessionId();
+    const defaultSettings: DocSettings = {
+      aspectRatio: '1:1',
+      gridEnabled: false,
+      gridCols: 2,
+      gridRows: 2,
+      gridThickness: 1,
+      gridColor: '#d1d5db',
+      backgroundColor: '#f5f5f5',
+      generationFillColor: '#ffffff',
+    };
+    const emptyDocState = { elements: [], settings: defaultSettings };
+    const existingSessions = await getAllSessions();
+    const boardName = `Board ${existingSessions.length + 1}`;
+    docHistory.reset(emptyDocState);
+    setSessionId(newSessionId);
+    updateSessionUrl(newSessionId);
+    await saveSession(newSessionId, emptyDocState, boardName);
+    setShowBoardsPanel(false);
   }, [docHistory, updateSessionUrl]);
 
   // Settings update helpers
@@ -696,6 +724,7 @@ export default function Home() {
           {showBoardsPanel && (
             <BoardsPanel
               onLoadBoard={handleLoadBoardFromSession}
+              onCreateBoard={handleCreateNewBoard}
               currentSessionId={sessionId}
             />
           )}
