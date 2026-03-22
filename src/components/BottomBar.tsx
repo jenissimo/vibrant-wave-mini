@@ -213,7 +213,7 @@ const BottomBar: React.FC<BottomBarProps> = ({ references, setReferences, prompt
       {showExpandedEditor && createPortal(
         <div className="fixed inset-0 z-[9998] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => closeExpandedEditor(false)} />
-          <div className="relative bg-background border border-border rounded-lg shadow-xl w-[640px] max-w-[90vw] max-h-[80vh] p-4 flex flex-col gap-3">
+          <div className="relative bg-background border border-border rounded-lg shadow-xl w-[800px] max-w-[90vw] h-[70vh] max-h-[700px] p-4 flex flex-col gap-3">
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium text-foreground">Edit Prompt</span>
               <button
@@ -239,7 +239,7 @@ const BottomBar: React.FC<BottomBarProps> = ({ references, setReferences, prompt
                 }
               }}
               placeholder="Describe what to generate…"
-              className="w-full flex-1 min-h-[200px] p-3 rounded-md border border-border bg-background text-sm text-foreground resize-none outline-none focus:ring-2 focus:ring-ring"
+              className="w-full flex-1 p-3 rounded-md border border-border bg-background text-sm text-foreground resize-none outline-none focus:ring-2 focus:ring-ring"
             />
             <div className="flex items-center justify-between">
               <span className="text-xs text-muted-foreground">
