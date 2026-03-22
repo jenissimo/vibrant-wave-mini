@@ -11,6 +11,7 @@ import LayersPanel from '@/components/panels/LayersPanel';
 import ElementSettingsPanel from '@/components/panels/ElementSettingsPanel';
 import GenerationSettingsPanel from '@/components/panels/GenerationSettingsPanel';
 import BoardsPanel from '@/components/panels/BoardsPanel';
+import ChangelogPanel from '@/components/panels/ChangelogPanel';
 import VariantSwitcher from '@/components/VariantSwitcher';
 import LoadingIndicator from '@/components/LoadingIndicator';
 import { useHistoryState } from '@/lib/useHistoryState';
@@ -72,6 +73,7 @@ export default function Home() {
   const heartbeatCleanupRef = useRef<(() => void) | null>(null);
   const saveTimeoutRef = useRef<number | null>(null);
   const [showBoardsPanel, setShowBoardsPanel] = useState(false);
+  const [showChangelog, setShowChangelog] = useState(false);
 
   const { canvasContainerRef, canvasSize, isCanvasReady } = useCanvasLayout();
   const generationArea = useGenerationArea(settings, canvasSize);
@@ -547,6 +549,7 @@ export default function Home() {
             onSaveBoard={handleSaveBoard}
             onLoadBoard={handleLoadClick}
             onOpenBoards={() => setShowBoardsPanel(!showBoardsPanel)}
+            onOpenChangelog={() => setShowChangelog(!showChangelog)}
           />
           <input
             ref={fileInputRef}
@@ -728,6 +731,7 @@ export default function Home() {
               currentSessionId={sessionId}
             />
           )}
+          {showChangelog && <ChangelogPanel />}
         </div>
         
         {/* Sidebar removed */}

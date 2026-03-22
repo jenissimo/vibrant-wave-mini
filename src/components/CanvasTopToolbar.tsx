@@ -1,5 +1,5 @@
 import React from 'react';
-import { Hand, MousePointer, Download, Sun, Moon, Monitor, LogOut, Undo, Redo, Save, FolderOpen, FolderKanban } from 'lucide-react';
+import { Hand, MousePointer, Download, Sun, Moon, Monitor, LogOut, Undo, Redo, Save, FolderOpen, FolderKanban, Newspaper } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -22,6 +22,7 @@ interface CanvasTopToolbarProps {
   onSaveBoard?: () => void;
   onLoadBoard?: () => void;
   onOpenBoards?: () => void;
+  onOpenChangelog?: () => void;
 }
 
 const CanvasTopToolbar: React.FC<CanvasTopToolbarProps> = ({ 
@@ -42,6 +43,7 @@ const CanvasTopToolbar: React.FC<CanvasTopToolbarProps> = ({
   onSaveBoard,
   onLoadBoard,
   onOpenBoards,
+  onOpenChangelog,
 }) => {
   return (
     <div className="absolute top-3 left-3 z-10 flex items-center gap-2 canvas-toolbar backdrop-blur shadow-sm rounded-md px-2 py-1">
@@ -87,6 +89,10 @@ const CanvasTopToolbar: React.FC<CanvasTopToolbarProps> = ({
       </Button>
       <Button variant="ghost" size="icon" onClick={onOpenBoards} title="Boards">
         <FolderKanban size={16} />
+      </Button>
+      <div className="w-px h-5 bg-border mx-1" />
+      <Button variant="ghost" size="icon" onClick={onOpenChangelog} title="Changelog">
+        <Newspaper size={16} />
       </Button>
       {showSignOut && (
         <>

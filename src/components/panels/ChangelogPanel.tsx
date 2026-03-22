@@ -1,0 +1,101 @@
+import React from 'react';
+import BaseFloatingPanel from '@/components/panels/BaseFloatingPanel';
+
+const CHANGELOG_PANEL_WIDTH = 400;
+
+interface ChangelogEntry {
+  date: string;
+  changes: string[];
+}
+
+const changelog: ChangelogEntry[] = [
+  {
+    date: 'March 22, 2026',
+    changes: [
+      'Added expanded prompt editor popup for long text editing',
+      'Added board naming, inline rename with double-click',
+      'Added delete confirmation for boards',
+      'Active board is now protected from deletion',
+      'New Board button in the Boards panel',
+    ],
+  },
+  {
+    date: 'January 30, 2026',
+    changes: [
+      'Updated dependencies',
+      'Refactored proxy logic',
+    ],
+  },
+  {
+    date: 'January 3, 2026',
+    changes: [
+      'Added OIDC authentication support',
+      'Configurable OIDC token endpoint auth method',
+      'Improved login flow',
+    ],
+  },
+  {
+    date: 'January 1, 2026',
+    changes: [
+      'Added multi-board support with session management',
+      'Board export/import in .wv format',
+      'Accept all variants at once',
+    ],
+  },
+  {
+    date: 'October 15, 2025',
+    changes: [
+      'Added aspect ratio support for image generation',
+    ],
+  },
+  {
+    date: 'September 24, 2025',
+    changes: [
+      'Added undo/redo controls to canvas toolbar',
+      'Refactored image handling and type safety',
+      'Improved variant generation with robust retries',
+      'Added download button to element settings',
+      'Added image slicing and drag-n-drop support',
+      'Added authentication',
+    ],
+  },
+  {
+    date: 'September 23, 2025',
+    changes: [
+      'First version released',
+      'Canvas with layers and floating panels',
+      'Zoom controls',
+      'Theme switching (light/dark/system)',
+    ],
+  },
+];
+
+const ChangelogPanel: React.FC = () => {
+  return (
+    <BaseFloatingPanel
+      title="Changelog"
+      initialPosition={{ x: (typeof window !== 'undefined' ? window.innerWidth / 2 - CHANGELOG_PANEL_WIDTH / 2 : 0), y: 80 }}
+      className="w-128"
+      storageKey="changelog"
+      panelWidth={CHANGELOG_PANEL_WIDTH}
+    >
+      <div className="overflow-auto space-y-4 px-2" style={{ minHeight: 128, maxHeight: 420 }}>
+        {changelog.map((entry) => (
+          <div key={entry.date}>
+            <div className="text-xs font-semibold text-foreground mb-1">{entry.date}</div>
+            <ul className="space-y-0.5">
+              {entry.changes.map((change, i) => (
+                <li key={i} className="text-xs text-muted-foreground flex gap-1.5">
+                  <span className="shrink-0 mt-[3px] w-1 h-1 rounded-full bg-muted-foreground/50" />
+                  {change}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </BaseFloatingPanel>
+  );
+};
+
+export default ChangelogPanel;
