@@ -1,4 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -209,10 +210,10 @@ const BottomBar: React.FC<BottomBarProps> = ({ references, setReferences, prompt
           </div>
         </div>
       </div>
-      {showExpandedEditor && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+      {showExpandedEditor && createPortal(
+        <div className="fixed inset-0 z-[9998] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => closeExpandedEditor(false)} />
-          <div className="relative z-50 bg-background border border-border rounded-lg shadow-xl w-[640px] max-w-[90vw] p-4 flex flex-col gap-3">
+          <div className="relative bg-background border border-border rounded-lg shadow-xl w-[640px] max-w-[90vw] max-h-[80vh] p-4 flex flex-col gap-3">
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium text-foreground">Edit Prompt</span>
               <button
@@ -238,7 +239,7 @@ const BottomBar: React.FC<BottomBarProps> = ({ references, setReferences, prompt
                 }
               }}
               placeholder="Describe what to generate…"
-              className="w-full min-h-[200px] max-h-[60vh] p-3 rounded-md border border-border bg-background text-sm text-foreground resize-y outline-none focus:ring-2 focus:ring-ring"
+              className="w-full flex-1 min-h-[200px] p-3 rounded-md border border-border bg-background text-sm text-foreground resize-none outline-none focus:ring-2 focus:ring-ring"
             />
             <div className="flex items-center justify-between">
               <span className="text-xs text-muted-foreground">
@@ -254,7 +255,8 @@ const BottomBar: React.FC<BottomBarProps> = ({ references, setReferences, prompt
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
