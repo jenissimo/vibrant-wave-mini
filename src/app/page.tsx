@@ -40,6 +40,7 @@ import {
   initializeChannel,
   checkActiveTabs,
   startHeartbeat,
+  renameSession,
 } from '@/lib/boardStorage';
 import { exportBoardToWv, importBoardFromWv } from '@/lib/boardFileFormat';
 
@@ -150,6 +151,7 @@ export default function Home() {
   const saveTimeoutRef = useRef<number | null>(null);
   const [showBoardsPanel, setShowBoardsPanel] = useState(false);
   const [showChangelog, setShowChangelog] = useState(false);
+  const [boardName, setBoardName] = useState<string>('Board 1');
 
   // Prompt presets (global, from settingsStore)
   const [promptPresets, setPromptPresets] = useState<PromptPreset[]>(() => settingsStore.getPresets());
@@ -491,6 +493,7 @@ export default function Home() {
             if (lastSession) {
               docHistory.reset(lastSession.docState);
               setSessionId(lastSession.sessionId);
+              setBoardName(lastSession.name || 'Untitled Board');
               updateSessionUrl(lastSession.sessionId);
             } else {
               // No sessions found, create new one
@@ -612,6 +615,7 @@ export default function Home() {
       if (sessionData) {
         docHistory.reset(sessionData.docState);
         setSessionId(sessionIdToLoad);
+        setBoardName(sessionData.name || 'Untitled Board');
         updateSessionUrl(sessionIdToLoad);
         setShowBoardsPanel(false);
       }
@@ -634,11 +638,12 @@ export default function Home() {
     };
     const emptyDocState = { elements: [], settings: defaultSettings };
     const existingSessions = await getAllSessions();
-    const boardName = `Board ${existingSessions.length + 1}`;
+    const newBoardName = `Board ${existingSessions.length + 1}`;
     docHistory.reset(emptyDocState);
     setSessionId(newSessionId);
+    setBoardName(newBoardName);
     updateSessionUrl(newSessionId);
-    await saveSession(newSessionId, emptyDocState, boardName);
+    await saveSession(newSessionId, emptyDocState, newBoardName);
     setShowBoardsPanel(false);
   }, [docHistory, updateSessionUrl]);
 
@@ -766,6 +771,11 @@ export default function Home() {
             canRedo={docHistory.canRedo}
             onSaveBoard={handleSaveBoard}
             onLoadBoard={handleLoadClick}
+            boardName={boardName}
+            onRenameBoard={async (name: string) => {
+              setBoardName(name);
+              if (sessionId) await renameSession(sessionId, name);
+            }}
             onOpenBoards={() => setShowBoardsPanel(!showBoardsPanel)}
             onOpenChangelog={() => setShowChangelog(!showChangelog)}
           />
@@ -961,6 +971,9 @@ export default function Home() {
               onLoadBoard={handleLoadBoardFromSession}
               onCreateBoard={handleCreateNewBoard}
               currentSessionId={sessionId}
+              onRenameBoard={(sid, name) => {
+                if (sid === sessionId) setBoardName(name);
+              }}
             />
           )}
           {showChangelog && <ChangelogPanel />}

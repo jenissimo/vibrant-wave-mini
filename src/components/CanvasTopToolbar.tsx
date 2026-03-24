@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Download, Sun, Moon, Monitor, LogOut, Undo, Redo, Save, FolderOpen, FolderKanban, Newspaper } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -21,6 +21,8 @@ interface CanvasTopToolbarProps {
   onLoadBoard?: () => void;
   onOpenBoards?: () => void;
   onOpenChangelog?: () => void;
+  boardName?: string;
+  onRenameBoard?: (name: string) => void;
 }
 
 const CanvasTopToolbar: React.FC<CanvasTopToolbarProps> = ({
@@ -40,9 +42,60 @@ const CanvasTopToolbar: React.FC<CanvasTopToolbarProps> = ({
   onLoadBoard,
   onOpenBoards,
   onOpenChangelog,
+  boardName,
+  onRenameBoard,
 }) => {
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editingName, setEditingName] = useState('');
+  const nameInputRef = useRef<HTMLInputElement>(null);
+  const cancelingRef = useRef(false);
+
+  useEffect(() => {
+    if (isEditingName && nameInputRef.current) {
+      nameInputRef.current.focus();
+      nameInputRef.current.select();
+    }
+  }, [isEditingName]);
+
+  const startEditingName = () => {
+    cancelingRef.current = false;
+    setEditingName(boardName || 'Untitled Board');
+    setIsEditingName(true);
+  };
+
+  const commitName = () => {
+    if (cancelingRef.current) return;
+    const trimmed = editingName.trim();
+    if (trimmed && trimmed !== boardName) {
+      onRenameBoard?.(trimmed);
+    }
+    setIsEditingName(false);
+  };
+
   return (
     <div className="absolute top-3 left-3 z-10 flex items-center gap-2 canvas-toolbar backdrop-blur shadow-sm rounded-md px-2 py-1">
+      {isEditingName ? (
+        <input
+          ref={nameInputRef}
+          className="text-xs font-medium bg-background border border-border rounded px-1.5 py-0.5 outline-none focus:ring-1 focus:ring-ring w-32"
+          value={editingName}
+          onChange={(e) => setEditingName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') commitName();
+            if (e.key === 'Escape') { cancelingRef.current = true; setIsEditingName(false); }
+          }}
+          onBlur={commitName}
+        />
+      ) : (
+        <span
+          className="text-xs font-medium text-muted-foreground cursor-pointer hover:text-foreground px-1.5 py-0.5 rounded hover:bg-accent/50 truncate max-w-40"
+          onClick={startEditingName}
+          title="Click to rename board"
+        >
+          {boardName || 'Untitled Board'}
+        </span>
+      )}
+      <div className="w-px h-5 bg-border mx-1" />
       <Button variant="ghost" size="icon" onClick={onUndo} disabled={!canUndo} title="Undo (Ctrl+Z)">
         <Undo size={16} />
       </Button>

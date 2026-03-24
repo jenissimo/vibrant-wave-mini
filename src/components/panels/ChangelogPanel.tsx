@@ -12,6 +12,8 @@ const changelog: ChangelogEntry[] = [
   {
     date: 'March 24, 2026',
     changes: [
+      'Board name displayed in top toolbar with click-to-edit inline rename',
+      'Rename button (pencil icon) in Boards panel — no more unreachable double-click',
       'Brush tool (B): freehand drawing with configurable color and stroke size',
       'Text tool (T): click to create, double-click to edit, Enter to confirm',
       'Draggable vertical toolbar on the left with tool selection and color/size controls',

@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { FolderKanban, Trash2, Loader2, Plus } from 'lucide-react';
+import { FolderKanban, Trash2, Loader2, Plus, Pencil } from 'lucide-react';
 import BaseFloatingPanel from '@/components/panels/BaseFloatingPanel';
 import { getAllSessions, deleteSession, renameSession, type SessionMetadata } from '@/lib/boardStorage';
 
@@ -12,9 +12,10 @@ interface BoardsPanelProps {
   onLoadBoard: (sessionId: string) => void;
   onCreateBoard: () => void;
   currentSessionId?: string | null;
+  onRenameBoard?: (sessionId: string, name: string) => void;
 }
 
-const BoardsPanel: React.FC<BoardsPanelProps> = ({ onLoadBoard, onCreateBoard, currentSessionId }) => {
+const BoardsPanel: React.FC<BoardsPanelProps> = ({ onLoadBoard, onCreateBoard, currentSessionId, onRenameBoard }) => {
   const [sessions, setSessions] = useState<SessionMetadata[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -69,6 +70,7 @@ const BoardsPanel: React.FC<BoardsPanelProps> = ({ onLoadBoard, onCreateBoard, c
     if (trimmed) {
       try {
         await renameSession(editingId, trimmed);
+        onRenameBoard?.(editingId, trimmed);
         await loadSessions();
       } catch (error) {
         console.error('Failed to rename session:', error);
@@ -153,10 +155,7 @@ const BoardsPanel: React.FC<BoardsPanelProps> = ({ onLoadBoard, onCreateBoard, c
                       onBlur={commitRename}
                     />
                   ) : (
-                    <div
-                      className="text-xs text-foreground truncate"
-                      onDoubleClick={(e) => startEditing(session, e)}
-                    >
+                    <div className="text-xs text-foreground truncate">
                       {session.name || 'Untitled Board'}
                     </div>
                   )}
@@ -164,6 +163,15 @@ const BoardsPanel: React.FC<BoardsPanelProps> = ({ onLoadBoard, onCreateBoard, c
                     {formatDate(session.updatedAt)} · {session.elementCount} element{session.elementCount !== 1 ? 's' : ''}
                   </div>
                 </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 shrink-0"
+                  title="Rename"
+                  onClick={(e) => startEditing(session, e)}
+                >
+                  <Pencil className="w-3 h-3" />
+                </Button>
                 <Button
                   variant="ghost"
                   size="icon"
