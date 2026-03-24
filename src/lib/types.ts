@@ -11,9 +11,16 @@ export type DocSettings = {
   generationFillColor: string;
 };
 
+export type PromptHistoryEntry = {
+  id: string;
+  text: string;
+  timestamp: number;
+};
+
 export type DocState = {
   elements: CanvasElementData[];
   settings: DocSettings;
+  promptHistory?: PromptHistoryEntry[];
 };
 
 export interface Command {

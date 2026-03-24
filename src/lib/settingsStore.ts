@@ -4,9 +4,17 @@ import { DocState } from './types';
 // This is a placeholder for the actual AppSettings type
 export type PanelPercentPosition = { xPct: number; yPct: number };
 
+export type PromptPreset = {
+  id: string;
+  name: string;
+  text: string;
+  createdAt: number;
+};
+
 export type AppSettings = {
   theme: 'light' | 'dark' | 'system';
   panelPositions: Record<string, PanelPercentPosition>;
+  promptPresets?: PromptPreset[];
 };
 
 type GlobalState = {
@@ -74,6 +82,43 @@ class SettingsStore extends Store<GlobalState> {
     const { settings } = this.getState();
     const newPositions = { ...settings.panelPositions, [key]: pos };
     const newSettings = { ...settings, panelPositions: newPositions };
+    this.setState({ settings: newSettings });
+    saveSettings(newSettings);
+  }
+
+  getPresets(): PromptPreset[] {
+    return this.getState().settings.promptPresets ?? [];
+  }
+
+  addPreset(name: string, text: string): PromptPreset {
+    const preset: PromptPreset = {
+      id: `preset_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      name,
+      text,
+      createdAt: Date.now(),
+    };
+    const { settings } = this.getState();
+    const presets = [preset, ...(settings.promptPresets ?? [])];
+    const newSettings = { ...settings, promptPresets: presets };
+    this.setState({ settings: newSettings });
+    saveSettings(newSettings);
+    return preset;
+  }
+
+  updatePreset(id: string, updates: Partial<Pick<PromptPreset, 'name' | 'text'>>) {
+    const { settings } = this.getState();
+    const presets = (settings.promptPresets ?? []).map(p =>
+      p.id === id ? { ...p, ...updates } : p
+    );
+    const newSettings = { ...settings, promptPresets: presets };
+    this.setState({ settings: newSettings });
+    saveSettings(newSettings);
+  }
+
+  deletePreset(id: string) {
+    const { settings } = this.getState();
+    const presets = (settings.promptPresets ?? []).filter(p => p.id !== id);
+    const newSettings = { ...settings, promptPresets: presets };
     this.setState({ settings: newSettings });
     saveSettings(newSettings);
   }

@@ -12,6 +12,9 @@ const changelog: ChangelogEntry[] = [
   {
     date: 'March 24, 2026',
     changes: [
+      'Prompt history: last 10 prompts saved per board, accessible via clock icon in bottom bar',
+      'Global prompt presets: save, rename, and delete reusable prompts across all boards',
+      'Expanded editor sidebar with History and Presets tabs for full prompt management',
       'Multi-select: Shift/Ctrl+click to select multiple elements on canvas',
       'Marquee selection: drag on empty space to select elements with a rectangle',
       'Shift+click range select and Ctrl+click toggle in Layers panel',

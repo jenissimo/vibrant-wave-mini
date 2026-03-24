@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { commandManager } from './commandManager';
 import { settingsStore } from './settingsStore';
 import { DocState } from './types';
@@ -10,6 +10,7 @@ export interface HistoryApi<T> {
   undo: () => void;
   redo: () => void;
   reset: (next: T) => void;
+  updatePresent: (updater: (state: T) => T) => void;
 }
 
 export function useHistoryState(initial: DocState): HistoryApi<DocState> {
@@ -52,6 +53,13 @@ export function useHistoryState(initial: DocState): HistoryApi<DocState> {
     commandManager.reset();
   };
 
+  const updatePresent = useCallback((updater: (state: DocState) => DocState) => {
+    const current = settingsStore.getState().doc;
+    if (current) {
+      settingsStore.setState({ doc: updater(current) });
+    }
+  }, []);
+
   return {
     present: docState,
     canUndo,
@@ -59,6 +67,7 @@ export function useHistoryState(initial: DocState): HistoryApi<DocState> {
     undo,
     redo,
     reset,
+    updatePresent,
   };
 }
 

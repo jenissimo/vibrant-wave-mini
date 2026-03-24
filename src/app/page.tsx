@@ -20,8 +20,8 @@ import { useCanvasLayout, useGenerationArea } from '@/lib/useCanvasLayout';
 import { useElementHistoryOps } from '@/lib/useElementHistoryOps';
 import { useGenerationFlow } from '@/lib/useGenerationFlow';
 import { useGlobalHotkeys } from '@/lib/useGlobalHotkeys';
-import type { DocSettings } from '@/lib/types';
-import { settingsStore } from '@/lib/settingsStore';
+import type { DocSettings, PromptHistoryEntry } from '@/lib/types';
+import { settingsStore, PromptPreset } from '@/lib/settingsStore';
 import { commandManager } from '@/lib/commandManager';
 import { UpdateSettingsCommand } from '@/lib/commands/UpdateSettingsCommand';
 import { UpdateElementCommand } from '@/lib/commands/UpdateElementCommand';
@@ -76,6 +76,14 @@ export default function Home() {
   const [showBoardsPanel, setShowBoardsPanel] = useState(false);
   const [showChangelog, setShowChangelog] = useState(false);
 
+  // Prompt presets (global, from settingsStore)
+  const [promptPresets, setPromptPresets] = useState<PromptPreset[]>(() => settingsStore.getPresets());
+  useEffect(() => {
+    return settingsStore.subscribe((state) => {
+      setPromptPresets(state.settings.promptPresets ?? []);
+    });
+  }, []);
+
   const { canvasContainerRef, canvasSize, isCanvasReady } = useCanvasLayout();
   const generationArea = useGenerationArea(settings, canvasSize);
 
@@ -93,9 +101,27 @@ export default function Home() {
     removeElement,
   } = ops;
   
+  const MAX_PROMPT_HISTORY = 10;
+
+  const appendPromptHistory = useCallback((text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    docHistory.updatePresent((doc) => {
+      const history = doc.promptHistory ?? [];
+      if (history.length > 0 && history[0].text === trimmed) return doc;
+      const entry: PromptHistoryEntry = {
+        id: `ph_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        text: trimmed,
+        timestamp: Date.now(),
+      };
+      return { ...doc, promptHistory: [entry, ...history].slice(0, MAX_PROMPT_HISTORY) };
+    });
+  }, [docHistory.updatePresent]);
+
   const handleGenerate = async (variantCount: number = 1) => {
     const base64 = canvasRef.current?.exportGenerationArea();
     if (!base64) return;
+    appendPromptHistory(prompt);
     await gen.handleGenerate({
       variantCount,
       payload: { prompt, canvas: base64, attachments: references, aspectRatio: settings.aspectRatio },
@@ -799,6 +825,11 @@ export default function Home() {
         onAddRefToCanvas={addElementFromRef}
         onPromptFocus={() => setActiveFocus('prompt')}
         onPromptBlur={() => setActiveFocus(null)}
+        promptHistory={docHistory.present.promptHistory ?? []}
+        promptPresets={promptPresets}
+        onSavePreset={(name, text) => settingsStore.addPreset(name, text)}
+        onUpdatePreset={(id, updates) => settingsStore.updatePreset(id, updates)}
+        onDeletePreset={(id) => settingsStore.deletePreset(id)}
       />
 
       {/* Variant Switcher */}
