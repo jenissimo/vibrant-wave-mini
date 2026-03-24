@@ -3,34 +3,42 @@ import { useEffect } from 'react';
 import { CanvasElementData } from '@/components/Canvas';
 import { clipboardManager } from './clipboardManager';
 import { AddElementCommand } from './commands/AddElementCommand';
+import { RemoveElementCommand } from './commands/RemoveElementCommand';
+import { CompositeCommand } from './commands/CompositeCommand';
 import { commandManager } from './commandManager';
 import { exportSliceAsImage, isSlice } from './sliceUtils';
 import { insertImageToCanvas, getImageFromFile, isImageFile } from './imageUtils';
+import type { Command } from './types';
 
 export function useGlobalHotkeys(args: {
   enabled: boolean;
-  selectedElementId: string | null;
+  selectedElementIds: string[];
   elements: CanvasElementData[];
   removeElement: (id: string) => void;
   addElement: (element: CanvasElementData) => Promise<string>;
   addReference: (dataUrl: string) => void;
-  setSelectedElementId: (id: string | null) => void;
+  setSelectedElementIds: (ids: string[]) => void;
   undo: () => void;
   redo: () => void;
   activeFocus: 'canvas' | 'prompt' | null;
 }) {
-  const { enabled, selectedElementId, elements, removeElement, addElement, addReference, setSelectedElementId, undo, redo, activeFocus } = args;
+  const { enabled, selectedElementIds, elements, removeElement, addElement, addReference, setSelectedElementIds, undo, redo, activeFocus } = args;
+
+  const deleteSelected = () => {
+    const ids = selectedElementIds.filter(id => id !== 'generation-area');
+    if (ids.length === 0) return;
+    if (ids.length === 1) {
+      removeElement(ids[0]);
+    } else {
+      commandManager.execute(new CompositeCommand(ids.map(id => new RemoveElementCommand(id))));
+    }
+    setSelectedElementIds([]);
+  };
 
   // Keydown hotkeys
   useHotkeys([
-    { key: 'Delete', handler: () => {
-      if (!selectedElementId || selectedElementId === 'generation-area') return;
-      removeElement(selectedElementId);
-    }},
-    { key: 'Backspace', handler: () => {
-      if (!selectedElementId || selectedElementId === 'generation-area') return;
-      removeElement(selectedElementId);
-    }},
+    { key: 'Delete', handler: deleteSelected },
+    { key: 'Backspace', handler: deleteSelected },
     { key: 'z', ctrl: true, handler: () => {
       if (activeFocus === 'canvas') undo();
     }},
@@ -49,6 +57,19 @@ export function useGlobalHotkeys(args: {
     { key: 'Z', meta: true, shift: true, handler: () => {
       if (activeFocus === 'canvas') redo();
     }},
+    { key: 'a', ctrl: true, handler: () => {
+      if (activeFocus === 'canvas') {
+        setSelectedElementIds(elements.map(e => e.id));
+      }
+    }},
+    { key: 'a', meta: true, handler: () => {
+      if (activeFocus === 'canvas') {
+        setSelectedElementIds(elements.map(e => e.id));
+      }
+    }},
+    { key: 'Escape', handler: () => {
+      setSelectedElementIds([]);
+    }},
   ], enabled);
 
   // Copy-paste events
@@ -56,32 +77,31 @@ export function useGlobalHotkeys(args: {
     if (!enabled) return;
 
     const handleCopy = async (e: ClipboardEvent) => {
-      if (activeFocus !== 'canvas' || !selectedElementId) return;
+      if (activeFocus !== 'canvas' || selectedElementIds.length === 0) return;
 
-      const selectedElement = elements.find(el => el.id === selectedElementId);
-      if (selectedElement) {
-        // 1. Internal clipboard
-        clipboardManager.copy(selectedElement);
-        
-        // 2. System clipboard (if it's an image) - but mark as internal copy
-        if (selectedElement.type === 'image') {
+      const selectedElements = elements.filter(el => selectedElementIds.includes(el.id));
+      if (selectedElements.length > 0) {
+        // 1. Internal clipboard (all selected elements)
+        clipboardManager.copyMany(selectedElements);
+
+        // 2. System clipboard (first image element only) - but mark as internal copy
+        const firstImage = selectedElements.find(el => el.type === 'image');
+        if (firstImage) {
           try {
             e.preventDefault();
-            
+
             let imageSrc: string;
-            if (isSlice(selectedElement)) {
-              // Export slice as separate image
-              imageSrc = await exportSliceAsImage(selectedElement);
+            if (isSlice(firstImage)) {
+              imageSrc = await exportSliceAsImage(firstImage);
             } else {
-              // Use original image
-              imageSrc = selectedElement.src;
+              imageSrc = firstImage.src;
             }
-            
+
             const response = await fetch(imageSrc);
             const blob = await response.blob();
             const clipboardItem = new ClipboardItem({ [blob.type]: blob });
             await navigator.clipboard.write([clipboardItem]);
-            
+
             // Mark that we just copied from canvas
             clipboardManager.markAsInternalCopy();
           } catch (err) {
@@ -90,36 +110,45 @@ export function useGlobalHotkeys(args: {
         }
       }
     };
-    
+
     const handlePaste = async (e: ClipboardEvent) => {
       if (!activeFocus) return;
-      
+
       const items = e.clipboardData?.items;
       if (!items) return;
-      
+
       // Handle canvas paste - smart priority logic
       if (activeFocus === 'canvas') {
         e.preventDefault();
-        
+
         // Check if we just copied from canvas (internal copy)
         const isInternalCopy = clipboardManager.isFromInternalCopy();
-        const internalElement = clipboardManager.paste();
-        
-        // If we have internal element and it's from our copy, prioritize it
-        if (isInternalCopy && internalElement) {
-          const id = `el_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
-          const newElement: CanvasElementData = {
-            ...internalElement,
-            id,
-            x: internalElement.x + 16,
-            y: internalElement.y + 16,
-          };
-          commandManager.execute(new AddElementCommand(newElement));
-          setSelectedElementId(newElement.id);
-          clipboardManager.clear(); // Reset internal copy flag
+        const internalElements = clipboardManager.pasteMany();
+
+        // If we have internal elements and it's from our copy, prioritize it
+        if (isInternalCopy && internalElements.length > 0) {
+          const newIds: string[] = [];
+          const commands: Command[] = [];
+          for (const el of internalElements) {
+            const id = `el_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
+            commands.push(new AddElementCommand({
+              ...el,
+              id,
+              x: el.x + 16,
+              y: el.y + 16,
+            } as CanvasElementData));
+            newIds.push(id);
+          }
+          if (commands.length === 1) {
+            commandManager.execute(commands[0]);
+          } else {
+            commandManager.execute(new CompositeCommand(commands));
+          }
+          setSelectedElementIds(newIds);
+          clipboardManager.clear();
           return;
         }
-        
+
         // Otherwise, check system clipboard for images
         let hasSystemImage = false;
         for (let i = 0; i < items.length; i++) {
@@ -133,7 +162,7 @@ export function useGlobalHotkeys(args: {
                   targetArea: { width: 200, height: 200, x: 100, y: 100 },
                   maxSize: { width: 200, height: 200 }
                 }, (element) => {
-                  setSelectedElementId(element.id);
+                  setSelectedElementIds([element.id]);
                 });
               }).catch(err => {
                 console.error('Failed to process clipboard image:', err);
@@ -142,22 +171,31 @@ export function useGlobalHotkeys(args: {
             break; // only paste one image
           }
         }
-        
+
         // If no system image found, try internal clipboard as fallback
-        if (!hasSystemImage && internalElement) {
-          const id = `el_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
-          const newElement: CanvasElementData = {
-            ...internalElement,
-            id,
-            x: internalElement.x + 16,
-            y: internalElement.y + 16,
-          };
-          commandManager.execute(new AddElementCommand(newElement));
-          setSelectedElementId(newElement.id);
+        if (!hasSystemImage && internalElements.length > 0) {
+          const newIds: string[] = [];
+          const commands: Command[] = [];
+          for (const el of internalElements) {
+            const id = `el_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
+            commands.push(new AddElementCommand({
+              ...el,
+              id,
+              x: el.x + 16,
+              y: el.y + 16,
+            } as CanvasElementData));
+            newIds.push(id);
+          }
+          if (commands.length === 1) {
+            commandManager.execute(commands[0]);
+          } else {
+            commandManager.execute(new CompositeCommand(commands));
+          }
+          setSelectedElementIds(newIds);
         }
         return;
       }
-      
+
       // Handle prompt paste - only system clipboard
       if (activeFocus === 'prompt') {
         for (let i = 0; i < items.length; i++) {
@@ -184,7 +222,5 @@ export function useGlobalHotkeys(args: {
       document.removeEventListener('copy', handleCopy);
       document.removeEventListener('paste', handlePaste);
     };
-  }, [enabled, activeFocus, selectedElementId, elements, addElement, addReference, setSelectedElementId]);
+  }, [enabled, activeFocus, selectedElementIds, elements, addElement, addReference, setSelectedElementIds]);
 }
-
-

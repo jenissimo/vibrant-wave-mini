@@ -4,30 +4,39 @@ import { CanvasElementData } from "@/components/Canvas";
 type CopyableElementData = Omit<CanvasElementData, 'id'>;
 
 class ClipboardManager {
-  private content: CopyableElementData | null = null;
-  private isInternalCopy: boolean = false;
+  private content: CopyableElementData[] = [];
+  private isInternalCopyFlag: boolean = false;
 
   public copy(element: CanvasElementData): void {
     const { id, ...rest } = element;
-    this.content = rest;
-    this.isInternalCopy = false; // Reset flag on new copy
+    this.content = [rest];
+    this.isInternalCopyFlag = false;
+  }
+
+  public copyMany(elements: CanvasElementData[]): void {
+    this.content = elements.map(({ id, ...rest }) => rest);
+    this.isInternalCopyFlag = false;
   }
 
   public paste(): CopyableElementData | null {
-    return this.content;
+    return this.content[0] ?? null;
+  }
+
+  public pasteMany(): CopyableElementData[] {
+    return [...this.content];
   }
 
   public clear(): void {
-    this.content = null;
-    this.isInternalCopy = false;
+    this.content = [];
+    this.isInternalCopyFlag = false;
   }
 
   public markAsInternalCopy(): void {
-    this.isInternalCopy = true;
+    this.isInternalCopyFlag = true;
   }
 
   public isFromInternalCopy(): boolean {
-    return this.isInternalCopy;
+    return this.isInternalCopyFlag;
   }
 }
 

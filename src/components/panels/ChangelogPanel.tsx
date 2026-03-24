@@ -10,6 +10,17 @@ interface ChangelogEntry {
 
 const changelog: ChangelogEntry[] = [
   {
+    date: 'March 24, 2026',
+    changes: [
+      'Multi-select: Shift/Ctrl+click to select multiple elements on canvas',
+      'Marquee selection: drag on empty space to select elements with a rectangle',
+      'Shift+click range select and Ctrl+click toggle in Layers panel',
+      'Batch operations: delete, copy/paste, and arrow-key nudge for multiple elements',
+      'Ctrl+A to select all, Escape to deselect',
+      'Single undo/redo for batch operations (multi-delete, multi-drag, multi-paste)',
+    ],
+  },
+  {
     date: 'March 22, 2026',
     changes: [
       'Added expanded prompt editor popup for long text editing',

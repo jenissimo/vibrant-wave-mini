@@ -3,54 +3,81 @@ import type { CanvasElementData } from '@/components/Canvas';
 import { MIN_ELEMENT_SIZE } from '@/lib/canvasDefaults';
 import { commandManager } from '@/lib/commandManager';
 import { TransformElementCommand } from './commands/TransformElementCommand';
+import { CompositeCommand } from './commands/CompositeCommand';
 import { AddElementCommand } from './commands/AddElementCommand';
 import { RemoveElementCommand } from './commands/RemoveElementCommand';
 import { ZOrderCommand } from './commands/ZOrderCommand';
+import { Command } from './types';
 
 export function useElementHistoryOps() {
-  const transformInitialState = useRef<CanvasElementData | null>(null);
+  const transformInitialStates = useRef<Map<string, CanvasElementData>>(new Map());
 
   const onElementTransformStart = (id: string, elements: CanvasElementData[]) => {
     const element = elements.find(el => el.id === id);
     if (element) {
-      transformInitialState.current = element;
+      transformInitialStates.current.set(id, element);
     }
   };
 
   const onElementTransformEnd = (id: string, finalRect: { x: number; y: number; width: number; height: number; rotation?: number }) => {
-    if (transformInitialState.current) {
-      const { x: oldX, y: oldY, width: oldW, height: oldH, rotation: oldRot } = transformInitialState.current;
+    const initial = transformInitialStates.current.get(id);
+    if (initial) {
+      const { x: oldX, y: oldY, width: oldW, height: oldH, rotation: oldRot } = initial;
       const oldProps = { x: oldX, y: oldY, width: oldW, height: oldH, rotation: oldRot };
-      
+
       const w = Math.max(MIN_ELEMENT_SIZE, finalRect.width);
       const h = Math.max(MIN_ELEMENT_SIZE, finalRect.height);
       const newProps = { ...finalRect, width: w, height: h };
-      
+
       const command = new TransformElementCommand(id, oldProps, newProps);
       commandManager.execute(command);
-      
-      transformInitialState.current = null;
+
+      transformInitialStates.current.delete(id);
     }
   };
 
   const onElementDragStart = (id: string, elements: CanvasElementData[]) => {
     const element = elements.find(el => el.id === id);
     if (element) {
-      transformInitialState.current = element;
+      transformInitialStates.current.set(id, element);
     }
   };
 
   const onElementDragEnd = (id: string, finalPosition: { x: number; y: number }) => {
-    if (transformInitialState.current) {
-      const { x: oldX, y: oldY, width, height, rotation } = transformInitialState.current;
+    const initial = transformInitialStates.current.get(id);
+    if (initial) {
+      const { x: oldX, y: oldY, width, height, rotation } = initial;
       const oldProps = { x: oldX, y: oldY, width, height, rotation };
       const newProps = { ...finalPosition, width, height, rotation };
-      
+
       const command = new TransformElementCommand(id, oldProps, newProps);
       commandManager.execute(command);
 
-      transformInitialState.current = null;
+      transformInitialStates.current.delete(id);
     }
+  };
+
+  const onMultiDragStart = (ids: string[], elements: CanvasElementData[]) => {
+    transformInitialStates.current.clear();
+    ids.forEach(id => {
+      const el = elements.find(e => e.id === id);
+      if (el) transformInitialStates.current.set(id, el);
+    });
+  };
+
+  const onMultiDragEnd = (positions: { id: string; x: number; y: number }[]) => {
+    const commands: Command[] = [];
+    for (const pos of positions) {
+      const initial = transformInitialStates.current.get(pos.id);
+      if (initial) {
+        commands.push(new TransformElementCommand(pos.id,
+          { x: initial.x, y: initial.y, width: initial.width, height: initial.height, rotation: initial.rotation },
+          { x: pos.x, y: pos.y, width: initial.width, height: initial.height, rotation: initial.rotation }
+        ));
+      }
+    }
+    if (commands.length > 0) commandManager.execute(new CompositeCommand(commands));
+    transformInitialStates.current.clear();
   };
 
   const zOrder = {
@@ -107,6 +134,8 @@ export function useElementHistoryOps() {
     onElementTransformEnd,
     onElementDragStart,
     onElementDragEnd,
+    onMultiDragStart,
+    onMultiDragEnd,
     zOrder,
     addElementFromRef,
     removeElement,

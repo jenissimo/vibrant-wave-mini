@@ -49,9 +49,9 @@ interface CanvasProps {
 
   // elements
   elements: CanvasElementData[];
-  selectedElementId?: string | null;
+  selectedElementIds?: string[];
   interactionMode: 'select' | 'pan';
-  onSelectElement: (id: string | null) => void;
+  onSelectElement: (id: string | null, opts?: { shift?: boolean; ctrl?: boolean }) => void;
   onElementPositionChange: (id: string, position: { x: number; y: number }) => void;
   onElementTransform?: (id: string, next: { x: number; y: number; width: number; height: number; rotation?: number }) => void;
   onElementTransformStart?: (id: string) => void;
@@ -60,8 +60,11 @@ interface CanvasProps {
   onElementDragStart?: (id: string) => void;
   onElementDragEnd?: (id: string, pos: { x: number; y: number }) => void;
   onElementNudge?: (id: string, position: { x: number; y: number }) => void;
+  onMultiDragStart?: (ids: string[]) => void;
+  onMultiDragEnd?: (positions: { id: string; x: number; y: number }[]) => void;
+  onMarqueeSelect?: (ids: string[], opts?: { shift?: boolean }) => void;
   snapEnabled?: boolean;
-  
+
   // drag-n-drop
   onImageDrop?: (file: File, position: { x: number; y: number }) => void;
 }
@@ -73,6 +76,34 @@ export interface CanvasRef {
   resetView: () => void;
   fitToArea: () => void;
 }
+
+// --- Marquee intersection helpers ---
+
+function getElementAABB(el: CanvasElementData) {
+  const r = (el.rotation ?? 0) * Math.PI / 180;
+  if (Math.abs(r) < 0.001) return { x: el.x, y: el.y, w: el.width, h: el.height };
+  const cx = el.x + el.width / 2;
+  const cy = el.y + el.height / 2;
+  const cos = Math.cos(r), sin = Math.sin(r);
+  const hw = el.width / 2, hh = el.height / 2;
+  const corners = [
+    { x: -hw, y: -hh }, { x: hw, y: -hh },
+    { x: hw, y: hh }, { x: -hw, y: hh },
+  ].map(p => ({ x: cx + p.x * cos - p.y * sin, y: cy + p.x * sin + p.y * cos }));
+  const xs = corners.map(c => c.x), ys = corners.map(c => c.y);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+}
+
+function rectsIntersect(
+  a: { x: number; y: number; w: number; h: number },
+  b: { x: number; y: number; w: number; h: number },
+) {
+  return !(a.x + a.w < b.x || b.x + b.w < a.x || a.y + a.h < b.y || b.y + b.h < a.y);
+}
+
+const MARQUEE_THRESHOLD = 3; // px screen distance before marquee activates
 
 const Canvas = forwardRef<CanvasRef, CanvasProps>(({
   width,
@@ -87,7 +118,7 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
   generationFillColor,
   attachmentCount,
   elements,
-  selectedElementId,
+  selectedElementIds,
   interactionMode,
   onSelectElement,
   onElementPositionChange,
@@ -98,6 +129,9 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
   onElementDragStart,
   onElementDragEnd,
   onElementNudge,
+  onMultiDragStart,
+  onMultiDragEnd,
+  onMarqueeSelect,
   snapEnabled,
   onImageDrop,
 }, ref) => {
@@ -113,8 +147,8 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
   const initialViewApplied = useRef(false);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const { colors: themeColors } = useTheme();
-  
+  const { colors: themeColors, isDarkMode } = useTheme();
+
   const { dataUrl: patternDataUrl, tile } = usePatternDots(themeColors.background);
 
   const { generationAreaAligned, snapWorldPosition, snapAbsolutePosition, snapRect } = useCanvasSnapping({
@@ -124,6 +158,27 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
     stageY,
     stageScale,
   });
+
+  // --- Marquee selection state ---
+  const [marqueeRect, setMarqueeRect] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const marqueeStartRef = useRef<{ worldX: number; worldY: number; screenX: number; screenY: number } | null>(null);
+  const marqueeTargetRef = useRef<'stage' | 'generation-area' | null>(null);
+  const marqueeRectRef = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
+  const marqueeCleanupRef = useRef<(() => void) | null>(null);
+  // Ref mirrors for values needed inside window-level listeners (avoid stale closures)
+  const stageXRef = useRef(stageX);
+  const stageYRef = useRef(stageY);
+  const stageScaleRef = useRef(stageScale);
+  const elementsRef = useRef(elements);
+  useEffect(() => { stageXRef.current = stageX; }, [stageX]);
+  useEffect(() => { stageYRef.current = stageY; }, [stageY]);
+  useEffect(() => { stageScaleRef.current = stageScale; }, [stageScale]);
+  useEffect(() => { elementsRef.current = elements; }, [elements]);
+
+  // Cleanup marquee window listeners on unmount
+  useEffect(() => {
+    return () => { marqueeCleanupRef.current?.(); };
+  }, []);
 
   useImperativeHandle(ref, () => ({
     exportGenerationArea: () => {
@@ -253,7 +308,7 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
     e.preventDefault();
     const files = Array.from(e.dataTransfer.files);
     const imageFile = files.find(file => file.type.startsWith('image/'));
-    
+
     if (imageFile && onImageDrop) {
       const stage = stageRef.current;
       if (stage) {
@@ -330,15 +385,14 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
         const tag = target.tagName?.toLowerCase();
         if (tag === 'input' || tag === 'textarea' || target.isContentEditable) return;
       }
-      
+
       if (interactionMode !== 'select') return;
-      if (!selectedElementId || selectedElementId === 'generation-area') return;
-      const el = elements.find(x => x.id === selectedElementId);
-      if (!el || el.locked) return;
+      const ids = (selectedElementIds ?? []).filter(id => id !== 'generation-area');
+      if (ids.length === 0) return;
       const key = e.key;
       if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(key)) return;
       e.preventDefault();
-      
+
       const snapStep = tile / 2;
       let dx = 0, dy = 0;
       if (key === 'ArrowUp') dy = -snapStep;
@@ -346,27 +400,34 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
       if (key === 'ArrowLeft') dx = -snapStep;
       if (key === 'ArrowRight') dx = snapStep;
 
-      if (onElementNudge) {
-        onElementNudge(el.id, { x: el.x + dx, y: el.y + dy });
-      } else {
-        onElementPositionChange(el.id, { x: el.x + dx, y: el.y + dy });
+      for (const id of ids) {
+        const el = elements.find(x => x.id === id);
+        if (!el || el.locked) continue;
+        if (onElementNudge) {
+          onElementNudge(el.id, { x: el.x + dx, y: el.y + dy });
+        } else {
+          onElementPositionChange(el.id, { x: el.x + dx, y: el.y + dy });
+        }
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [elements, selectedElementId, interactionMode, tile, stageScale, onElementPositionChange, onElementNudge]);
+  }, [elements, selectedElementIds, interactionMode, tile, stageScale, onElementPositionChange, onElementNudge]);
 
-  // Attach transformer to selected node
+  // Attach transformer to selected nodes (supports multi-select)
   useEffect(() => {
     const tr = transformerRef.current;
     if (!tr) return;
-    if (selectedElementId && nodeRefs.current[selectedElementId]) {
-      tr.nodes([nodeRefs.current[selectedElementId]]);
-    } else {
-      tr.nodes([]);
-    }
+    const nodes = (selectedElementIds ?? [])
+      .filter(id => {
+        if (id === 'generation-area') return false;
+        const el = elements.find(e => e.id === id);
+        return el && !el.locked && nodeRefs.current[id];
+      })
+      .map(id => nodeRefs.current[id]);
+    tr.nodes(nodes);
     tr.getLayer()?.batchDraw();
-  }, [selectedElementId, elements]);
+  }, [selectedElementIds, elements]);
 
   const handleTransformStart = useCallback((id: string) => {
     onElementTransformStart?.(id);
@@ -400,9 +461,95 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
     onElementTransformEnd?.(id, next);
   }, [onElementTransform, onElementTransformEnd, snapEnabled, snapRect]);
 
+  // --- Marquee: start tracking on mousedown on empty space ---
+  const startMarqueeTracking = useCallback((e: KonvaEventObject<MouseEvent>) => {
+    if (interactionMode !== 'select') return;
+    if ((e.evt as MouseEvent).button !== 0) return;
+
+    const target = e.target as Konva.Node;
+    const isStage = target?.getClassName?.() === 'Stage';
+    const isGenArea = typeof target?.name === 'function' && target.name() === 'generation-area-bg';
+    if (!isStage && !isGenArea) return;
+
+    const stage = stageRef.current;
+    const pointer = stage?.getPointerPosition();
+    if (!pointer) return;
+
+    const worldX = (pointer.x - stageXRef.current) / stageScaleRef.current;
+    const worldY = (pointer.y - stageYRef.current) / stageScaleRef.current;
+    marqueeStartRef.current = { worldX, worldY, screenX: e.evt.clientX, screenY: e.evt.clientY };
+    marqueeTargetRef.current = isGenArea ? 'generation-area' : 'stage';
+    marqueeRectRef.current = null;
+
+    const handleMarqueeMove = (me: MouseEvent) => {
+      const start = marqueeStartRef.current;
+      if (!start) return;
+
+      const dx = me.clientX - start.screenX;
+      const dy = me.clientY - start.screenY;
+      if (!marqueeRectRef.current && Math.sqrt(dx * dx + dy * dy) < MARQUEE_THRESHOLD) return;
+
+      const stg = stageRef.current;
+      if (!stg) return;
+      const container = stg.container().getBoundingClientRect();
+      const pointerX = me.clientX - container.left;
+      const pointerY = me.clientY - container.top;
+      const curWorldX = (pointerX - stageXRef.current) / stageScaleRef.current;
+      const curWorldY = (pointerY - stageYRef.current) / stageScaleRef.current;
+
+      const rect = {
+        x: Math.min(start.worldX, curWorldX),
+        y: Math.min(start.worldY, curWorldY),
+        width: Math.abs(curWorldX - start.worldX),
+        height: Math.abs(curWorldY - start.worldY),
+      };
+      marqueeRectRef.current = rect;
+      setMarqueeRect(rect);
+    };
+
+    const removeListeners = () => {
+      window.removeEventListener('mousemove', handleMarqueeMove);
+      window.removeEventListener('mouseup', handleMarqueeUp);
+      marqueeCleanupRef.current = null;
+    };
+
+    const handleMarqueeUp = (me: MouseEvent) => {
+      removeListeners();
+
+      const finalRect = marqueeRectRef.current;
+      if (finalRect && (finalRect.width > 0 || finalRect.height > 0)) {
+        // Marquee drag completed — select intersected elements
+        const marquee = { x: finalRect.x, y: finalRect.y, w: finalRect.width, h: finalRect.height };
+        const currentElements = elementsRef.current;
+        const intersectedIds = currentElements
+          .filter(el => el.visible)
+          .filter(el => rectsIntersect(getElementAABB(el), marquee))
+          .map(el => el.id);
+
+        onMarqueeSelect?.(intersectedIds, me.shiftKey ? { shift: true } : undefined);
+      } else {
+        // No marquee (click) — deselect or select generation area
+        if (marqueeTargetRef.current === 'generation-area') {
+          onSelectElement('generation-area');
+        } else {
+          onSelectElement(null);
+        }
+      }
+
+      marqueeStartRef.current = null;
+      marqueeTargetRef.current = null;
+      marqueeRectRef.current = null;
+      setMarqueeRect(null);
+    };
+
+    marqueeCleanupRef.current = removeListeners;
+    window.addEventListener('mousemove', handleMarqueeMove);
+    window.addEventListener('mouseup', handleMarqueeUp);
+  }, [interactionMode, onSelectElement, onMarqueeSelect]);
+
   return (
-    <div 
-      ref={containerRef} 
+    <div
+      ref={containerRef}
       className="w-full h-full"
       onDragOver={handleDragOver}
       onDrop={handleDrop}
@@ -421,13 +568,7 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
         draggable={interactionMode === 'pan' || isPanning}
         onMouseDown={(e) => {
           handleMouseDown(e);
-          // deselect when clicking empty space (only in select mode and left button)
-          if (interactionMode === 'select' && (e.evt as MouseEvent).button === 0) {
-            const target = e.target as Konva.Node;
-            if (target && target.getClassName && target.getClassName() === 'Stage') {
-              onSelectElement(null);
-            }
-          }
+          startMarqueeTracking(e);
         }}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseLeave}
@@ -437,12 +578,12 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
         <Layer ref={contentLayerRef}>
           {/* Generation area background fill */}
           <Rect
+            name="generation-area-bg"
             x={generationAreaAligned.x}
             y={generationAreaAligned.y}
             width={generationAreaAligned.width}
             height={generationAreaAligned.height}
             fill={generationFillColor}
-            onClick={() => { if (interactionMode === 'select') onSelectElement('generation-area'); }}
             onTap={() => { if (interactionMode === 'select') onSelectElement('generation-area'); }}
           />
           {renderGenerationGrid()}
@@ -452,16 +593,37 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
               <CanvasImage
                 key={el.id}
                 data={el}
-                isSelected={selectedElementId === el.id}
+                isSelected={(selectedElementIds ?? []).includes(el.id)}
                 draggable={interactionMode === 'select' && !el.locked}
                 dragBoundFunc={snapEnabled ? (pos) => snapAbsolutePosition(pos) : undefined}
-                onSelect={() => onSelectElement(el.id)}
+                onSelect={(e) => {
+                  const nativeEvt = e?.evt;
+                  const shift = nativeEvt?.shiftKey ?? false;
+                  const ctrl = nativeEvt?.ctrlKey ?? nativeEvt?.metaKey ?? false;
+                  onSelectElement(el.id, (shift || ctrl) ? { shift, ctrl } : undefined);
+                }}
                 onDragStart={() => {
-                  onSelectElement(el.id);
-                  onElementDragStart?.(el.id);
+                  const ids = selectedElementIds ?? [];
+                  if (!ids.includes(el.id)) {
+                    onSelectElement(el.id);
+                    onElementDragStart?.(el.id);
+                  } else if (ids.filter(id => id !== 'generation-area').length > 1) {
+                    onMultiDragStart?.(ids.filter(id => id !== 'generation-area'));
+                  } else {
+                    onElementDragStart?.(el.id);
+                  }
                 }}
                 onDragEnd={(pos) => {
-                  if (onElementDragEnd) {
+                  const ids = (selectedElementIds ?? []).filter(id => id !== 'generation-area');
+                  if (ids.length > 1 && ids.includes(el.id)) {
+                    const positions = ids
+                      .map(id => {
+                        const node = nodeRefs.current[id];
+                        return node ? { id, x: node.x(), y: node.y() } : null;
+                      })
+                      .filter(Boolean) as { id: string; x: number; y: number }[];
+                    onMultiDragEnd?.(positions);
+                  } else if (onElementDragEnd) {
                     const snappedPos = snapEnabled ? snapWorldPosition(pos) : pos;
                     onElementDragEnd(el.id, snappedPos);
                   }
@@ -483,8 +645,8 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
             y={generationAreaAligned.y}
             width={generationAreaAligned.width}
             height={generationAreaAligned.height}
-            stroke={selectedElementId === 'generation-area' ? themeColors.primary : themeColors.border}
-            strokeWidth={selectedElementId === 'generation-area' ? 1.5 : 1}
+            stroke={(selectedElementIds ?? []).includes('generation-area') ? themeColors.primary : themeColors.border}
+            strokeWidth={(selectedElementIds ?? []).includes('generation-area') ? 1.5 : 1}
             shadowColor={themeColors.shadow}
             shadowOffset={{ x: 0, y: 1 }}
             listening={false}
@@ -510,8 +672,31 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
               listening={false}
             />
           </Group>
-          {/* Single selection transformer */}
-          <SelectionTransformer 
+          {/* Marquee selection rectangle */}
+          {marqueeRect && (
+            <Group listening={false}>
+              <Rect
+                x={marqueeRect.x}
+                y={marqueeRect.y}
+                width={marqueeRect.width}
+                height={marqueeRect.height}
+                fill={themeColors.primary}
+                opacity={isDarkMode ? 0.25 : 0.15}
+                listening={false}
+              />
+              <Rect
+                x={marqueeRect.x}
+                y={marqueeRect.y}
+                width={marqueeRect.width}
+                height={marqueeRect.height}
+                stroke={themeColors.primary}
+                strokeWidth={1 / stageScale}
+                listening={false}
+              />
+            </Group>
+          )}
+          {/* Selection transformer */}
+          <SelectionTransformer
             transformerRef={transformerRef}
           />
         </Layer>

@@ -12,8 +12,8 @@ const LAYERS_LIST_MAX_HEIGHT = 384; // ~max-h-96
 
 interface LayersPanelProps {
   elements: CanvasElementData[];
-  selectedId: string | null;
-  onSelect: (id: string | null) => void;
+  selectedIds: string[];
+  onSelect: (id: string | null, opts?: { shift?: boolean; ctrl?: boolean }) => void;
   onToggleVisible: (id: string) => void;
   onToggleLocked: (id: string) => void;
   onDelete: (id: string) => void;
@@ -27,7 +27,7 @@ interface LayersPanelProps {
 
 const LayersPanel: React.FC<LayersPanelProps> = ({
   elements,
-  selectedId,
+  selectedIds,
   onSelect,
   onToggleVisible,
   onToggleLocked,
@@ -63,8 +63,8 @@ const LayersPanel: React.FC<LayersPanelProps> = ({
         {elements.map((el, idx) => (
           <div
             key={el.id}
-            className={`flex items-center gap-2 px-2 py-1 rounded cursor-pointer ${selectedId===el.id ? 'bg-accent' : 'hover:bg-accent/50'}`}
-            onClick={() => onSelect(el.id)}
+            className={`flex items-center gap-2 px-2 py-1 rounded cursor-pointer ${selectedIds.includes(el.id) ? 'bg-accent' : 'hover:bg-accent/50'}`}
+            onClick={(e) => onSelect(el.id, e.shiftKey ? { shift: true } : (e.ctrlKey || e.metaKey) ? { ctrl: true } : undefined)}
           >
             <div className="w-6 h-6 rounded border overflow-hidden bg-muted">
               {el.type === 'image' && el.src && (
@@ -112,7 +112,7 @@ const LayersPanel: React.FC<LayersPanelProps> = ({
         <div className="h-px bg-border mx-2 my-1" />
         {/* Generation area as last row (bottom-most) */}
         <div
-          className={`flex items-center gap-2 px-2 py-1 rounded cursor-pointer ${selectedId==='generation-area' ? 'bg-accent' : 'hover:bg-accent/50'}`}
+          className={`flex items-center gap-2 px-2 py-1 rounded cursor-pointer ${selectedIds.includes('generation-area') ? 'bg-accent' : 'hover:bg-accent/50'}`}
           onClick={() => onSelect('generation-area')}
         >
           <div className="w-6 h-6 rounded border bg-muted flex items-center justify-center text-[10px] --muted-foreground">GA</div>

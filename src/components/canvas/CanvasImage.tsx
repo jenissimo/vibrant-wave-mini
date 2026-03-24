@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { Image as KonvaImage, Rect } from 'react-konva';
 import Konva from 'konva';
+import { KonvaEventObject } from 'konva/lib/Node';
 import type { CanvasElementData } from '@/components/Canvas';
 
 interface CanvasImageProps {
   data: CanvasElementData;
   isSelected: boolean;
   draggable: boolean;
-  onSelect: () => void;
+  onSelect: (e?: KonvaEventObject<MouseEvent>) => void;
   onDragStart?: () => void;
   onDragEnd: (pos: { x: number; y: number }) => void;
   onDragMove?: (pos: { x: number; y: number }) => void;
@@ -37,8 +38,8 @@ export default function CanvasImage(props: CanvasImageProps) {
         rotation={data.rotation || 0}
         draggable={draggable}
         dragBoundFunc={dragBoundFunc}
-        onClick={onSelect}
-        onTap={onSelect}
+        onClick={(e) => onSelect(e as KonvaEventObject<MouseEvent>)}
+        onTap={(e) => onSelect(e as unknown as KonvaEventObject<MouseEvent>)}
         onDragStart={(e) => { e.cancelBubble = true; onDragStart?.(); }}
         onDragMove={(e) => { e.cancelBubble = true; onDragMove?.({ x: e.target.x(), y: e.target.y() }); }}
         onDragEnd={(e) => { e.cancelBubble = true; onDragEnd({ x: e.target.x(), y: e.target.y() }); }}

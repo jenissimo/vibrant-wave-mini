@@ -62,7 +62,8 @@ export default function Home() {
   const [interactionMode, setInteractionMode] = useState<'select' | 'pan'>('select');
   const [snapEnabled, setSnapEnabled] = useState<boolean>(true);
   const { isHydrated } = useTheme();
-  const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
+  const [selectedElementIds, setSelectedElementIds] = useState<string[]>([]);
+  const lastClickedRef = useRef<string | null>(null);
   const [activeFocus, setActiveFocus] = useState<'canvas' | 'prompt' | null>(null);
   const gen = useGenerationFlow();
   
@@ -85,6 +86,8 @@ export default function Home() {
     onElementTransformEnd,
     onElementDragStart,
     onElementDragEnd,
+    onMultiDragStart,
+    onMultiDragEnd,
     zOrder,
     addElementFromRef: addElementFromRefOp,
     removeElement,
@@ -131,7 +134,7 @@ export default function Home() {
       locked: false 
     };
     commandManager.execute(new AddElementCommand(newElement));
-    setSelectedElementId(id);
+    setSelectedElementIds([id]);
   };
 
   const handleAcceptVariant = async (variant: { image: string | null; text: string | null }) => {
@@ -237,7 +240,7 @@ export default function Home() {
 
     // Select the last added element
     if (addedIds.length > 0) {
-      setSelectedElementId(addedIds[addedIds.length - 1]);
+      setSelectedElementIds([addedIds[addedIds.length - 1]]);
     }
 
     gen.setGeneratedVariants(null);
@@ -247,7 +250,53 @@ export default function Home() {
     gen.setGeneratedVariants(null);
   };
 
-  const onSelectElement = (id: string | null) => setSelectedElementId(id);
+  const onSelectElement = useCallback((id: string | null, opts?: { shift?: boolean; ctrl?: boolean }) => {
+    if (!id) {
+      setSelectedElementIds([]);
+      lastClickedRef.current = null;
+      return;
+    }
+    if (id === 'generation-area') {
+      setSelectedElementIds(['generation-area']);
+      lastClickedRef.current = null;
+      return;
+    }
+    if (opts?.shift && lastClickedRef.current) {
+      setSelectedElementIds(prev => {
+        const elementIds = elements.map(e => e.id);
+        const startIdx = elementIds.indexOf(lastClickedRef.current!);
+        const endIdx = elementIds.indexOf(id);
+        if (startIdx === -1 || endIdx === -1) return [id];
+        const low = Math.min(startIdx, endIdx);
+        const high = Math.max(startIdx, endIdx);
+        const rangeIds = elementIds.slice(low, high + 1);
+        const merged = new Set([...prev.filter(x => x !== 'generation-area'), ...rangeIds]);
+        return Array.from(merged);
+      });
+      return;
+    }
+    if (opts?.ctrl) {
+      setSelectedElementIds(prev => {
+        const filtered = prev.filter(x => x !== 'generation-area');
+        return filtered.includes(id) ? filtered.filter(x => x !== id) : [...filtered, id];
+      });
+    } else {
+      setSelectedElementIds([id]);
+    }
+    lastClickedRef.current = id;
+  }, [elements]);
+  const handleMarqueeSelect = useCallback((ids: string[], opts?: { shift?: boolean }) => {
+    if (opts?.shift) {
+      setSelectedElementIds(prev => {
+        const merged = new Set([...prev.filter(x => x !== 'generation-area'), ...ids]);
+        return Array.from(merged);
+      });
+    } else {
+      setSelectedElementIds(ids.length > 0 ? ids : []);
+    }
+    if (ids.length > 0) lastClickedRef.current = ids[ids.length - 1];
+  }, []);
+
   // Moved element handlers to a reusable hook
   const { moveUp, moveDown, bringToFront, sendToBack } = zOrder;
 
@@ -255,24 +304,26 @@ export default function Home() {
   const addElementFromRef = async (index: number, src: string) => {
     if (!src) return;
     const id = await addElementFromRefOp(src, generationArea);
-    setSelectedElementId(id);
+    setSelectedElementIds([id]);
   };
 
   // Keep selection valid across history changes
   useEffect(() => {
-    if (!selectedElementId || selectedElementId === 'generation-area') return;
-    if (!elements.some(e => e.id === selectedElementId)) setSelectedElementId(null);
-  }, [elements, selectedElementId]);
+    setSelectedElementIds(prev => {
+      const valid = prev.filter(id => id === 'generation-area' || elements.some(e => e.id === id));
+      return valid.length !== prev.length ? valid : prev;
+    });
+  }, [elements]);
 
   // Global hotkeys
   useGlobalHotkeys({
     enabled: true,
-    selectedElementId,
+    selectedElementIds,
     elements,
-    removeElement: (id) => { removeElement(id); if (selectedElementId === id) setSelectedElementId(null); },
+    removeElement,
     addElement: async (el) => await addElementFromRefOp(el.src, el),
     addReference: (src) => setReferences([...references, src]),
-    setSelectedElementId,
+    setSelectedElementIds,
     undo: docHistory.undo,
     redo: docHistory.redo,
     activeFocus,
@@ -574,7 +625,7 @@ export default function Home() {
               generationFillColor={settings.generationFillColor}
               attachmentCount={references.length}
               elements={elements}
-              selectedElementId={selectedElementId}
+              selectedElementIds={selectedElementIds}
               interactionMode={interactionMode}
               snapEnabled={snapEnabled}
               onSelectElement={onSelectElement}
@@ -586,6 +637,9 @@ export default function Home() {
               onElementDragStart={(id) => onElementDragStart(id, elements)}
               onElementDragEnd={(id, finalPosition) => onElementDragEnd(id, finalPosition)}
               onElementNudge={() => {}}
+              onMultiDragStart={(ids) => onMultiDragStart(ids, elements)}
+              onMultiDragEnd={(positions) => onMultiDragEnd(positions)}
+              onMarqueeSelect={handleMarqueeSelect}
               onImageDrop={async (file, position) => {
                 if (!isImageFile(file)) return;
                 
@@ -598,7 +652,7 @@ export default function Home() {
                     maxSize: { width: generationArea.width, height: generationArea.height },
                     offset: { x: position.x - generationArea.x, y: position.y - generationArea.y }
                   }, (element) => {
-                    setSelectedElementId(element.id);
+                    setSelectedElementIds([element.id]);
                   });
                 } catch (err) {
                   console.error('Failed to drop image:', err);
@@ -623,7 +677,7 @@ export default function Home() {
             onFit={() => canvasRef.current?.fitToArea()}
           />
           {/* Settings panels */}
-          {selectedElementId === 'generation-area' && (
+          {selectedElementIds.includes('generation-area') && (
             <GenerationSettingsPanel
               aspectRatio={settings.aspectRatio}
               setAspectRatio={(v) => updateSettings({ aspectRatio: v })}
@@ -641,8 +695,8 @@ export default function Home() {
               setGenerationFillColor={(v) => updateSettings({ generationFillColor: v })}
             />
           )}
-          {selectedElementId && selectedElementId !== 'generation-area' && (() => {
-            const el = elements.find(e => e.id === selectedElementId);
+          {selectedElementIds.length === 1 && selectedElementIds[0] !== 'generation-area' && (() => {
+            const el = elements.find(e => e.id === selectedElementIds[0]);
             if (!el) return null;
             return (
               <ElementSettingsPanel
@@ -652,22 +706,20 @@ export default function Home() {
                   const newProps = { ...oldProps, ...updates };
                   commandManager.execute(new UpdateElementCommand(el.id, oldProps, newProps));
                 }}
-                onDelete={()=>{ removeElement(el.id); setSelectedElementId(null); }}
+                onDelete={()=>{ removeElement(el.id); setSelectedElementIds([]); }}
                 onDuplicate={()=>{
                   const id = `el_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
                   const newEl = { ...el, id, x: el.x + 16, y: el.y + 16 };
                   commandManager.execute(new AddElementCommand(newEl));
-                  setSelectedElementId(id);
+                  setSelectedElementIds([id]);
                 }}
               />
             );
           })()}
           <LayersPanel
             elements={elements}
-            selectedId={selectedElementId}
-            onSelect={(id)=>{
-              setSelectedElementId(id as string);
-            }}
+            selectedIds={selectedElementIds}
+            onSelect={onSelectElement}
             onToggleVisible={(id)=> {
               const el = elements.find(e => e.id === id);
               if (el) {
@@ -677,7 +729,7 @@ export default function Home() {
               }
             }}
             onToggleLocked={()=> {/* lock removed */}}
-            onDelete={(id)=>{ removeElement(id); if(selectedElementId===id) setSelectedElementId(null); }}
+            onDelete={(id)=>{ removeElement(id); setSelectedElementIds(prev => prev.filter(x => x !== id)); }}
             onMoveUp={moveUp}
             onMoveDown={moveDown}
             onBringToFront={bringToFront}
@@ -717,7 +769,7 @@ export default function Home() {
                   targetArea: generationArea,
                   maxSize: { width: generationArea.width, height: generationArea.height }
                 }, (element) => {
-                  setSelectedElementId(element.id);
+                  setSelectedElementIds([element.id]);
                 });
               } catch (err) {
                 console.error('Failed to import image:', err);
