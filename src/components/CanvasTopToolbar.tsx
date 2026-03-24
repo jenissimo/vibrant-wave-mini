@@ -1,12 +1,10 @@
 import React from 'react';
-import { Hand, MousePointer, Download, Sun, Moon, Monitor, LogOut, Undo, Redo, Save, FolderOpen, FolderKanban, Newspaper } from 'lucide-react';
+import { Download, Sun, Moon, Monitor, LogOut, Undo, Redo, Save, FolderOpen, FolderKanban, Newspaper } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 
 interface CanvasTopToolbarProps {
-  interactionMode: 'select' | 'pan';
-  setInteractionMode: (mode: 'select' | 'pan') => void;
   onDownload?: () => void;
   snapEnabled?: boolean;
   onToggleSnap?: (v: boolean) => void;
@@ -25,16 +23,14 @@ interface CanvasTopToolbarProps {
   onOpenChangelog?: () => void;
 }
 
-const CanvasTopToolbar: React.FC<CanvasTopToolbarProps> = ({ 
-  interactionMode, 
-  setInteractionMode, 
-  onDownload, 
-  snapEnabled, 
-  onToggleSnap, 
-  theme, 
-  isHydrated, 
-  onToggleTheme, 
-  onSignOut, 
+const CanvasTopToolbar: React.FC<CanvasTopToolbarProps> = ({
+  onDownload,
+  snapEnabled,
+  onToggleSnap,
+  theme,
+  isHydrated,
+  onToggleTheme,
+  onSignOut,
   showSignOut,
   onUndo,
   onRedo,
@@ -47,13 +43,6 @@ const CanvasTopToolbar: React.FC<CanvasTopToolbarProps> = ({
 }) => {
   return (
     <div className="absolute top-3 left-3 z-10 flex items-center gap-2 canvas-toolbar backdrop-blur shadow-sm rounded-md px-2 py-1">
-      <Button variant={interactionMode==='select' ? 'default' : 'ghost'} size="icon" onClick={() => setInteractionMode('select')} title="Select (V)">
-        <MousePointer size={16} />
-      </Button>
-      <Button variant={interactionMode==='pan' ? 'default' : 'ghost'} size="icon" onClick={() => setInteractionMode('pan')} title="Pan (H)">
-        <Hand size={16} />
-      </Button>
-      <div className="w-px h-5 bg-border mx-1" />
       <Button variant="ghost" size="icon" onClick={onUndo} disabled={!canUndo} title="Undo (Ctrl+Z)">
         <Undo size={16} />
       </Button>

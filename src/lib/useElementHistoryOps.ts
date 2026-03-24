@@ -19,11 +19,14 @@ export function useElementHistoryOps() {
     }
   };
 
-  const onElementTransformEnd = (id: string, finalRect: { x: number; y: number; width: number; height: number; rotation?: number }) => {
+  const onElementTransformEnd = (id: string, finalRect: { x: number; y: number; width: number; height: number; rotation?: number; points?: number[] }) => {
     const initial = transformInitialStates.current.get(id);
     if (initial) {
-      const { x: oldX, y: oldY, width: oldW, height: oldH, rotation: oldRot } = initial;
-      const oldProps = { x: oldX, y: oldY, width: oldW, height: oldH, rotation: oldRot };
+      const oldProps = {
+        x: initial.x, y: initial.y, width: initial.width, height: initial.height,
+        rotation: initial.rotation,
+        ...(initial.points ? { points: initial.points } : {}),
+      };
 
       const w = Math.max(MIN_ELEMENT_SIZE, finalRect.width);
       const h = Math.max(MIN_ELEMENT_SIZE, finalRect.height);

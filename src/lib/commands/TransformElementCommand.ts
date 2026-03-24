@@ -8,6 +8,7 @@ type TransformableProps = {
   width: number;
   height: number;
   rotation?: number;
+  points?: number[];
 };
 
 export class TransformElementCommand implements Command {

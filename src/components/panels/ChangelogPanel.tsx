@@ -12,6 +12,14 @@ const changelog: ChangelogEntry[] = [
   {
     date: 'March 24, 2026',
     changes: [
+      'Brush tool (B): freehand drawing with configurable color and stroke size',
+      'Text tool (T): click to create, double-click to edit, Enter to confirm',
+      'Draggable vertical toolbar on the left with tool selection and color/size controls',
+      'Circle cursor for brush that reflects actual size and color',
+      'Hotkeys: V/H/B/T for tools, [ ] to adjust brush size',
+      'Drawing and text elements support selection, transform, undo/redo, copy/paste, and z-order',
+      'Element settings panel shows type-specific controls (stroke, font size, color)',
+      'Board export/import (.wv) updated for drawing and text elements',
       'Prompt history: last 10 prompts saved per board, accessible via clock icon in bottom bar',
       'Global prompt presets: save, rename, and delete reusable prompts across all boards',
       'Expanded editor sidebar with History and Presets tabs for full prompt management',

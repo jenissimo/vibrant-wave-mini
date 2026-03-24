@@ -99,25 +99,75 @@ const ElementSettingsPanel: React.FC<ElementSettingsPanelProps> = ({ element, on
               <Label>Locked removed</Label>
             </div>
           </div>
+          {/* Drawing-specific settings */}
+          {element.type === 'drawing' && (
+            <div className="space-y-2 border-t pt-2">
+              <div className="flex items-center gap-2">
+                <Label className="text-xs w-14">Stroke</Label>
+                <input
+                  type="color"
+                  value={element.stroke || '#000000'}
+                  onChange={(e) => onChange({ stroke: e.target.value })}
+                  className="w-8 h-6 rounded border cursor-pointer"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Stroke Width</Label>
+                <Input type="number" min={1} max={50} value={element.strokeWidth || 2} onChange={(e) => onChange({ strokeWidth: parseFloat(e.target.value || '2') })} />
+              </div>
+            </div>
+          )}
+          {/* Text-specific settings */}
+          {element.type === 'text' && (
+            <div className="space-y-2 border-t pt-2">
+              <div className="space-y-1">
+                <Label className="text-xs">Text</Label>
+                <textarea
+                  className="w-full text-xs border rounded px-2 py-1 bg-background resize-none"
+                  rows={3}
+                  value={element.text || ''}
+                  onChange={(e) => onChange({ text: e.target.value })}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-xs">Font Size</Label>
+                  <Input type="number" min={8} max={200} value={element.fontSize || 24} onChange={(e) => onChange({ fontSize: parseFloat(e.target.value || '24') })} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Color</Label>
+                  <input
+                    type="color"
+                    value={element.fill || '#000000'}
+                    onChange={(e) => onChange({ fill: e.target.value })}
+                    className="w-full h-8 rounded border cursor-pointer"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
           <div className="flex justify-between pt-1">
             <Button variant="secondary" size="sm" onClick={onDuplicate}>Duplicate</Button>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={handleSlice}
-              disabled={!canSlice}
-              title={!canSlice ? "Slice available only for images" : "Slice element by grid"}
-            >
-              Slice
-            </Button>
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={handleDownload}
-              title="Download element"
-            >
-              <Download className="w-3.5 h-3.5" />
-            </Button>
+            {canSlice && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSlice}
+                title="Slice element by grid"
+              >
+                Slice
+              </Button>
+            )}
+            {element.type === 'image' && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleDownload}
+                title="Download element"
+              >
+                <Download className="w-3.5 h-3.5" />
+              </Button>
+            )}
             <Button variant="destructive" size="sm" onClick={onDelete}>Delete</Button>
           </div>
         </div>

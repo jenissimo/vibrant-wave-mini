@@ -7,7 +7,7 @@ export async function exportSliceAsImage(element: CanvasElementData): Promise<st
   if (element.sliceX === undefined || element.sliceY === undefined || 
       element.sliceWidth === undefined || element.sliceHeight === undefined) {
     // Not a slice, return original image
-    return element.src;
+    return element.src || '';
   }
 
   return new Promise((resolve, reject) => {
@@ -44,7 +44,7 @@ export async function exportSliceAsImage(element: CanvasElementData): Promise<st
     };
 
     img.onerror = () => reject(new Error('Failed to load image'));
-    img.src = element.src;
+    img.src = element.src || '';
   });
 }
 

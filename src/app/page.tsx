@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useSession, signOut } from 'next-auth/react';
 import Canvas, { CanvasRef } from '@/components/Canvas';
 import CanvasTopToolbar from '@/components/CanvasTopToolbar';
+import CanvasLeftToolbar from '@/components/CanvasLeftToolbar';
 import CanvasBottomZoom from '@/components/CanvasBottomZoom';
 import AssistantNote from '@/components/AssistantNote';
 import BottomBar from '@/components/BottomBar';
@@ -26,7 +27,8 @@ import { commandManager } from '@/lib/commandManager';
 import { UpdateSettingsCommand } from '@/lib/commands/UpdateSettingsCommand';
 import { UpdateElementCommand } from '@/lib/commands/UpdateElementCommand';
 import { AddElementCommand } from '@/lib/commands/AddElementCommand';
-import { CanvasElementData } from '@/components/Canvas';
+import { RemoveElementCommand } from '@/lib/commands/RemoveElementCommand';
+import { CanvasElementData, InteractionMode } from '@/components/Canvas';
 import { exportSliceAsImage, isSlice } from '@/lib/sliceUtils';
 import { insertImageToCanvas, getImageFromFile, isImageFile } from '@/lib/imageUtils';
 import {
@@ -40,6 +42,64 @@ import {
   startHeartbeat,
 } from '@/lib/boardStorage';
 import { exportBoardToWv, importBoardFromWv } from '@/lib/boardFileFormat';
+
+function TextEditOverlay({ editingTextId, elements, canvasRef, onFinalize }: {
+  editingTextId: string;
+  elements: CanvasElementData[];
+  canvasRef: React.RefObject<CanvasRef | null>;
+  onFinalize: (id: string, text: string) => void;
+}) {
+  const el = elements.find(e => e.id === editingTextId);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    // Focus on next tick to ensure element is mounted
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  }, [editingTextId]);
+
+  if (!el || el.type !== 'text') return null;
+  const screenPos = canvasRef.current?.getScreenPosition(el.x, el.y);
+  if (!screenPos) return null;
+
+  return (
+    <textarea
+      ref={textareaRef}
+      defaultValue={el.text || ''}
+      style={{
+        position: 'absolute',
+        left: screenPos.x,
+        top: screenPos.y,
+        fontSize: `${(el.fontSize || 24) * screenPos.scale}px`,
+        fontFamily: el.fontFamily || 'Arial',
+        color: el.fill || '#000000',
+        width: `${(el.width || 200) * screenPos.scale}px`,
+        minHeight: `${(el.fontSize || 24) * 1.5 * screenPos.scale}px`,
+        background: 'transparent',
+        border: '1px dashed var(--border)',
+        outline: 'none',
+        resize: 'none',
+        overflow: 'hidden',
+        transformOrigin: 'top left',
+        transform: `rotate(${el.rotation || 0}deg)`,
+        zIndex: 20,
+        padding: 0,
+        margin: 0,
+        lineHeight: '1.2',
+      }}
+      onBlur={(e) => onFinalize(editingTextId, e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          onFinalize(editingTextId, e.currentTarget.value);
+        }
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          onFinalize(editingTextId, e.currentTarget.value);
+        }
+      }}
+    />
+  );
+}
 
 export default function Home() {
   const { data: session } = useSession();
@@ -59,7 +119,12 @@ export default function Home() {
   const [references, setReferences] = useState<string[]>([]);
   const [prompt, setPrompt] = useState('');
   const canvasRef = useRef<CanvasRef>(null);
-  const [interactionMode, setInteractionMode] = useState<'select' | 'pan'>('select');
+  const [interactionMode, setInteractionMode] = useState<InteractionMode>('select');
+  const [brushColor, setBrushColor] = useState('#ef4444');
+  const [brushSize, setBrushSize] = useState(3);
+  const [textColor, setTextColor] = useState('#000000');
+  const [textFontSize, setTextFontSize] = useState(24);
+  const [editingTextId, setEditingTextId] = useState<string | null>(null);
   const [snapEnabled, setSnapEnabled] = useState<boolean>(true);
   const { isHydrated } = useTheme();
   const [selectedElementIds, setSelectedElementIds] = useState<string[]>([]);
@@ -347,12 +412,16 @@ export default function Home() {
     selectedElementIds,
     elements,
     removeElement,
-    addElement: async (el) => await addElementFromRefOp(el.src, el),
+    addElement: async (el) => await addElementFromRefOp(el.src || '', el),
     addReference: (src) => setReferences([...references, src]),
     setSelectedElementIds,
     undo: docHistory.undo,
     redo: docHistory.redo,
     activeFocus,
+    interactionMode,
+    setInteractionMode,
+    brushSize,
+    setBrushSize,
   });
 
   // Update URL with sessionId
@@ -574,8 +643,50 @@ export default function Home() {
     }
   };
 
+  // --- Drawing/Text/Eraser handlers ---
+  const handleDrawingComplete = useCallback((element: CanvasElementData) => {
+    commandManager.execute(new AddElementCommand(element));
+  }, []);
+
+  const handleTextCreate = useCallback((worldPos: { x: number; y: number }) => {
+    const id = `el_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const element: CanvasElementData = {
+      id,
+      type: 'text',
+      x: worldPos.x,
+      y: worldPos.y,
+      width: 200,
+      height: textFontSize * 1.5,
+      text: '',
+      fontSize: textFontSize,
+      fontFamily: 'Arial',
+      fill: textColor,
+      visible: true,
+      locked: false,
+    };
+    commandManager.execute(new AddElementCommand(element));
+    setSelectedElementIds([id]);
+    setEditingTextId(id);
+  }, [textFontSize, textColor]);
+
+  const handleTextEdit = useCallback((id: string) => {
+    setEditingTextId(id);
+  }, []);
+
+  const finalizeTextEdit = useCallback((id: string, newText: string) => {
+    const el = elements.find(e => e.id === id);
+    if (!el) { setEditingTextId(null); return; }
+    if (!newText.trim()) {
+      commandManager.execute(new RemoveElementCommand(id));
+      setSelectedElementIds([]);
+    } else if (newText !== el.text) {
+      commandManager.execute(new UpdateElementCommand(id, { text: el.text }, { text: newText }));
+    }
+    setEditingTextId(null);
+  }, [elements]);
+
   return (
-    <div className="h-screen flex flex-col bg-muted/30">     
+    <div className="h-screen flex flex-col bg-muted/30">
       <div className="flex flex-1 overflow-hidden">
         {/* Canvas area */}
         <div
@@ -591,10 +702,17 @@ export default function Home() {
               onDismiss={() => gen.setAssistantNote(null)}
             />
           )}
-          {/* Canvas top-left toolbar (icons) */}
-          <CanvasTopToolbar
+          {/* Canvas left toolbar (tools) */}
+          <CanvasLeftToolbar
             interactionMode={interactionMode}
             setInteractionMode={setInteractionMode}
+            color={interactionMode === 'text' ? textColor : brushColor}
+            onColorChange={interactionMode === 'text' ? setTextColor : setBrushColor}
+            size={interactionMode === 'text' ? textFontSize : brushSize}
+            onSizeChange={interactionMode === 'text' ? setTextFontSize : setBrushSize}
+          />
+          {/* Canvas top toolbar (actions) */}
+          <CanvasTopToolbar
             snapEnabled={snapEnabled}
             onToggleSnap={setSnapEnabled}
             theme={settingsStore.getState().settings.theme}
@@ -666,6 +784,12 @@ export default function Home() {
               onMultiDragStart={(ids) => onMultiDragStart(ids, elements)}
               onMultiDragEnd={(positions) => onMultiDragEnd(positions)}
               onMarqueeSelect={handleMarqueeSelect}
+              brushColor={brushColor}
+              brushSize={brushSize}
+              onDrawingComplete={handleDrawingComplete}
+              onTextCreate={handleTextCreate}
+              onTextEdit={handleTextEdit}
+              editingTextId={editingTextId}
               onImageDrop={async (file, position) => {
                 if (!isImageFile(file)) return;
                 
@@ -694,6 +818,13 @@ export default function Home() {
             </div>
           )}
 
+          {/* Text editing overlay */}
+          {editingTextId && <TextEditOverlay
+            editingTextId={editingTextId}
+            elements={elements}
+            canvasRef={canvasRef}
+            onFinalize={finalizeTextEdit}
+          />}
 
           {/* Canvas bottom-center controls */}
           <CanvasBottomZoom

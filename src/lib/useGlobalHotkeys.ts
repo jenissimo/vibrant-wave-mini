@@ -1,6 +1,6 @@
 import { useHotkeys } from '@/lib/useHotkeys';
 import { useEffect } from 'react';
-import { CanvasElementData } from '@/components/Canvas';
+import { CanvasElementData, InteractionMode } from '@/components/Canvas';
 import { clipboardManager } from './clipboardManager';
 import { AddElementCommand } from './commands/AddElementCommand';
 import { RemoveElementCommand } from './commands/RemoveElementCommand';
@@ -21,8 +21,12 @@ export function useGlobalHotkeys(args: {
   undo: () => void;
   redo: () => void;
   activeFocus: 'canvas' | 'prompt' | null;
+  interactionMode: InteractionMode;
+  setInteractionMode: (mode: InteractionMode) => void;
+  brushSize: number;
+  setBrushSize: (size: number) => void;
 }) {
-  const { enabled, selectedElementIds, elements, removeElement, addElement, addReference, setSelectedElementIds, undo, redo, activeFocus } = args;
+  const { enabled, selectedElementIds, elements, removeElement, addElement, addReference, setSelectedElementIds, undo, redo, activeFocus, interactionMode, setInteractionMode, brushSize, setBrushSize } = args;
 
   const deleteSelected = () => {
     const ids = selectedElementIds.filter(id => id !== 'generation-area');
@@ -68,8 +72,15 @@ export function useGlobalHotkeys(args: {
       }
     }},
     { key: 'Escape', handler: () => {
-      setSelectedElementIds([]);
+      if (interactionMode !== 'select') setInteractionMode('select');
+      else setSelectedElementIds([]);
     }},
+    { key: 'v', handler: () => setInteractionMode('select') },
+    { key: 'h', handler: () => setInteractionMode('pan') },
+    { key: 'b', handler: () => setInteractionMode('brush') },
+    { key: 't', handler: () => setInteractionMode('text') },
+    { key: '[', handler: () => setBrushSize(Math.max(1, brushSize - (brushSize > 10 ? 5 : 1))) },
+    { key: ']', handler: () => setBrushSize(Math.min(50, brushSize + (brushSize >= 10 ? 5 : 1))) },
   ], enabled);
 
   // Copy-paste events
@@ -85,8 +96,8 @@ export function useGlobalHotkeys(args: {
         clipboardManager.copyMany(selectedElements);
 
         // 2. System clipboard (first image element only) - but mark as internal copy
-        const firstImage = selectedElements.find(el => el.type === 'image');
-        if (firstImage) {
+        const firstImage = selectedElements.find(el => el.type === 'image' && el.src);
+        if (firstImage && firstImage.src) {
           try {
             e.preventDefault();
 

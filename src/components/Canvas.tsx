@@ -1,8 +1,10 @@
 import React, { useRef, useState, useCallback, forwardRef, useImperativeHandle, useEffect, useMemo } from 'react';
-import { Stage, Layer, Rect, Group, Circle, Text } from 'react-konva';
+import { Stage, Layer, Rect, Group, Circle, Text, Line } from 'react-konva';
 import Konva from 'konva';
 import { KonvaEventObject } from 'konva/lib/Node';
 import CanvasImage from '@/components/canvas/CanvasImage';
+import CanvasDrawing from '@/components/canvas/CanvasDrawing';
+import CanvasText from '@/components/canvas/CanvasText';
 import usePatternDots from '@/components/canvas/usePatternDots';
 import GenerationGrid from '@/components/canvas/GenerationGrid';
 import SelectionTransformer from '@/components/canvas/SelectionTransformer';
@@ -10,25 +12,37 @@ import { MIN_ELEMENT_SIZE } from '@/lib/canvasDefaults';
 import { useCanvasSnapping } from '@/lib/useCanvasSnapping';
 import { useTheme } from '@/lib/useTheme';
 
+export type InteractionMode = 'select' | 'pan' | 'brush' | 'text';
+
 export interface CanvasElementData {
   id: string;
-  type: 'image';
-  src: string;
-  name?: string;
+  type: 'image' | 'drawing' | 'text';
+  // Common
   x: number;
   y: number;
   width: number;
   height: number;
-  originalWidth?: number; // Original image width
-  originalHeight?: number; // Original image height
-  // Slice properties for cropped images
-  sliceX?: number; // X position in original image
-  sliceY?: number; // Y position in original image
-  sliceWidth?: number; // Width in original image
-  sliceHeight?: number; // Height in original image
   visible: boolean;
   locked: boolean;
   rotation?: number;
+  name?: string;
+  // Image-specific
+  src?: string;
+  originalWidth?: number;
+  originalHeight?: number;
+  sliceX?: number;
+  sliceY?: number;
+  sliceWidth?: number;
+  sliceHeight?: number;
+  // Drawing-specific
+  points?: number[];       // flat [x0,y0,x1,y1,...] relative to element origin
+  stroke?: string;         // hex color
+  strokeWidth?: number;
+  // Text-specific
+  text?: string;
+  fontSize?: number;
+  fontFamily?: string;
+  fill?: string;           // text color
 }
 
 interface CanvasProps {
@@ -50,7 +64,7 @@ interface CanvasProps {
   // elements
   elements: CanvasElementData[];
   selectedElementIds?: string[];
-  interactionMode: 'select' | 'pan';
+  interactionMode: InteractionMode;
   onSelectElement: (id: string | null, opts?: { shift?: boolean; ctrl?: boolean }) => void;
   onElementPositionChange: (id: string, position: { x: number; y: number }) => void;
   onElementTransform?: (id: string, next: { x: number; y: number; width: number; height: number; rotation?: number }) => void;
@@ -67,6 +81,14 @@ interface CanvasProps {
 
   // drag-n-drop
   onImageDrop?: (file: File, position: { x: number; y: number }) => void;
+
+  // drawing/text tools
+  brushColor?: string;
+  brushSize?: number;
+  onDrawingComplete?: (element: CanvasElementData) => void;
+  onTextCreate?: (worldPos: { x: number; y: number }) => void;
+  onTextEdit?: (id: string) => void;
+  editingTextId?: string | null;
 }
 
 export interface CanvasRef {
@@ -75,6 +97,7 @@ export interface CanvasRef {
   zoomOut: () => void;
   resetView: () => void;
   fitToArea: () => void;
+  getScreenPosition: (worldX: number, worldY: number) => { x: number; y: number; scale: number };
 }
 
 // --- Marquee intersection helpers ---
@@ -134,6 +157,12 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
   onMarqueeSelect,
   snapEnabled,
   onImageDrop,
+  brushColor,
+  brushSize,
+  onDrawingComplete,
+  onTextCreate,
+  onTextEdit,
+  editingTextId,
 }, ref) => {
   const stageRef = useRef<Konva.Stage | null>(null);
   const contentLayerRef = useRef<Konva.Layer | null>(null);
@@ -174,6 +203,15 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
   useEffect(() => { stageYRef.current = stageY; }, [stageY]);
   useEffect(() => { stageScaleRef.current = stageScale; }, [stageScale]);
   useEffect(() => { elementsRef.current = elements; }, [elements]);
+
+  // --- Active stroke state (for brush drawing) ---
+  const [activeStroke, setActiveStroke] = useState<{ startX: number; startY: number; points: number[] } | null>(null);
+  const activeStrokeRef = useRef<{ startX: number; startY: number; points: number[] } | null>(null);
+  const drawingCleanupRef = useRef<(() => void) | null>(null);
+  const brushColorRef = useRef(brushColor);
+  const brushSizeRef = useRef(brushSize);
+  useEffect(() => { brushColorRef.current = brushColor; }, [brushColor]);
+  useEffect(() => { brushSizeRef.current = brushSize; }, [brushSize]);
 
   // Cleanup marquee window listeners on unmount
   useEffect(() => {
@@ -223,6 +261,11 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
       setStageY(newY);
     },
     fitToArea: () => fitToGenerationArea(),
+    getScreenPosition: (worldX: number, worldY: number) => ({
+      x: worldX * stageScale + stageX,
+      y: worldY * stageScale + stageY,
+      scale: stageScale,
+    }),
   }));
 
   // Center the view on the generation area initially
@@ -444,13 +487,18 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
     const scaleY = node.scaleY() || 1;
     const nextWidth = Math.max(MIN_ELEMENT_SIZE, node.width() * scaleX);
     const nextHeight = Math.max(MIN_ELEMENT_SIZE, node.height() * scaleY);
-    let next = {
+    let next: { x: number; y: number; width: number; height: number; rotation?: number; points?: number[] } = {
       x: node.x(),
       y: node.y(),
       width: nextWidth,
       height: nextHeight,
       rotation: node.rotation?.() ?? 0,
     };
+    // Scale drawing points proportionally
+    const el = elements.find(e => e.id === id);
+    if (el?.type === 'drawing' && el.points) {
+      next.points = el.points.map((val, i) => val * (i % 2 === 0 ? scaleX : scaleY));
+    }
     node.scaleX(1);
     node.scaleY(1);
     if (snapEnabled) {
@@ -459,7 +507,7 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
     }
     onElementTransform?.(id, next);
     onElementTransformEnd?.(id, next);
-  }, [onElementTransform, onElementTransformEnd, snapEnabled, snapRect]);
+  }, [onElementTransform, onElementTransformEnd, snapEnabled, snapRect, elements]);
 
   // --- Marquee: start tracking on mousedown on empty space ---
   const startMarqueeTracking = useCallback((e: KonvaEventObject<MouseEvent>) => {
@@ -547,10 +595,127 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
     window.addEventListener('mouseup', handleMarqueeUp);
   }, [interactionMode, onSelectElement, onMarqueeSelect]);
 
+  // --- Brush drawing ---
+  const startDrawing = useCallback((e: KonvaEventObject<MouseEvent>) => {
+    if ((e.evt as MouseEvent).button !== 0) return;
+    const stage = stageRef.current;
+    const pointer = stage?.getPointerPosition();
+    if (!pointer) return;
+
+    const worldX = (pointer.x - stageXRef.current) / stageScaleRef.current;
+    const worldY = (pointer.y - stageYRef.current) / stageScaleRef.current;
+    const stroke = { startX: worldX, startY: worldY, points: [0, 0] };
+    activeStrokeRef.current = stroke;
+    setActiveStroke(stroke);
+
+    let rafId: number | null = null;
+
+    const handleDrawMove = (me: MouseEvent) => {
+      const start = activeStrokeRef.current;
+      if (!start) return;
+      const stg = stageRef.current;
+      if (!stg) return;
+      const container = stg.container().getBoundingClientRect();
+      const px = me.clientX - container.left;
+      const py = me.clientY - container.top;
+      const wx = (px - stageXRef.current) / stageScaleRef.current;
+      const wy = (py - stageYRef.current) / stageScaleRef.current;
+      start.points.push(wx - start.startX, wy - start.startY);
+      if (rafId === null) {
+        rafId = requestAnimationFrame(() => {
+          rafId = null;
+          setActiveStroke({ ...start, points: [...start.points] });
+        });
+      }
+    };
+
+    const handleDrawUp = () => {
+      window.removeEventListener('mousemove', handleDrawMove);
+      window.removeEventListener('mouseup', handleDrawUp);
+      drawingCleanupRef.current = null;
+      if (rafId !== null) cancelAnimationFrame(rafId);
+
+      const current = activeStrokeRef.current;
+      activeStrokeRef.current = null;
+      setActiveStroke(null);
+
+      if (!current || current.points.length < 4) return;
+
+      // Compute bounding box and normalize points
+      const pts = current.points;
+      const xs = pts.filter((_, i) => i % 2 === 0);
+      const ys = pts.filter((_, i) => i % 2 === 1);
+      const minX = Math.min(...xs), maxX = Math.max(...xs);
+      const minY = Math.min(...ys), maxY = Math.max(...ys);
+      const w = Math.max(1, maxX - minX);
+      const h = Math.max(1, maxY - minY);
+      const normalizedPoints = pts.map((val, i) => val - (i % 2 === 0 ? minX : minY));
+
+      const element: CanvasElementData = {
+        id: `el_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        type: 'drawing',
+        x: current.startX + minX,
+        y: current.startY + minY,
+        width: w,
+        height: h,
+        points: normalizedPoints,
+        stroke: brushColorRef.current || '#000000',
+        strokeWidth: brushSizeRef.current || 3,
+        visible: true,
+        locked: false,
+      };
+      onDrawingComplete?.(element);
+    };
+
+    const cleanup = () => {
+      window.removeEventListener('mousemove', handleDrawMove);
+      window.removeEventListener('mouseup', handleDrawUp);
+    };
+    drawingCleanupRef.current = cleanup;
+    window.addEventListener('mousemove', handleDrawMove);
+    window.addEventListener('mouseup', handleDrawUp);
+  }, [onDrawingComplete]);
+
+  // --- Text creation click ---
+  const handleTextClick = useCallback((e: KonvaEventObject<MouseEvent>) => {
+    if ((e.evt as MouseEvent).button !== 0) return;
+    const target = e.target as Konva.Node;
+    const isStage = target?.getClassName?.() === 'Stage';
+    const isGenArea = typeof target?.name === 'function' && target.name() === 'generation-area-bg';
+    if (!isStage && !isGenArea) return;
+
+    const stage = stageRef.current;
+    const pointer = stage?.getPointerPosition();
+    if (!pointer) return;
+    const worldX = (pointer.x - stageXRef.current) / stageScaleRef.current;
+    const worldY = (pointer.y - stageYRef.current) / stageScaleRef.current;
+    onTextCreate?.({ x: worldX, y: worldY });
+  }, [onTextCreate]);
+
+  // Cleanup drawing listeners on unmount
+  useEffect(() => {
+    return () => {
+      drawingCleanupRef.current?.();
+    };
+  }, []);
+
+  // Custom circle cursor for brush/eraser
+  const brushCursor = useMemo(() => {
+    if (interactionMode !== 'brush') {
+      return ({ select: 'default', pan: 'grab', text: 'text' } as Record<string, string>)[interactionMode] || 'default';
+    }
+    const diameter = Math.max(4, Math.min(128, (brushSize || 3) * stageScale));
+    const r = diameter / 2;
+    const strokeColor = (brushColor || '#000000').replace('#', '%23');
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${diameter}" height="${diameter}"><circle cx="${r}" cy="${r}" r="${r - 0.5}" fill="none" stroke="${strokeColor}" stroke-width="1"/></svg>`;
+    return `url('data:image/svg+xml,${svg}') ${r} ${r}, crosshair`;
+  }, [interactionMode, brushSize, brushColor, stageScale]);
+
   return (
     <div
       ref={containerRef}
       className="w-full h-full"
+      style={{ cursor: brushCursor }}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >
@@ -568,7 +733,9 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
         draggable={interactionMode === 'pan' || isPanning}
         onMouseDown={(e) => {
           handleMouseDown(e);
-          startMarqueeTracking(e);
+          if (interactionMode === 'select') startMarqueeTracking(e);
+          else if (interactionMode === 'brush') startDrawing(e);
+          else if (interactionMode === 'text') handleTextClick(e);
         }}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseLeave}
@@ -588,54 +755,76 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
           />
           {renderGenerationGrid()}
           {/* Elements render (not clipped visually; export crops to area) */}
-          {[...elements].slice().reverse().map((el) => (
-            el.visible ? (
-              <CanvasImage
-                key={el.id}
-                data={el}
-                isSelected={(selectedElementIds ?? []).includes(el.id)}
-                draggable={interactionMode === 'select' && !el.locked}
-                dragBoundFunc={snapEnabled ? (pos) => snapAbsolutePosition(pos) : undefined}
-                onSelect={(e) => {
-                  const nativeEvt = e?.evt;
-                  const shift = nativeEvt?.shiftKey ?? false;
-                  const ctrl = nativeEvt?.ctrlKey ?? nativeEvt?.metaKey ?? false;
-                  onSelectElement(el.id, (shift || ctrl) ? { shift, ctrl } : undefined);
-                }}
-                onDragStart={() => {
-                  const ids = selectedElementIds ?? [];
-                  if (!ids.includes(el.id)) {
-                    onSelectElement(el.id);
-                    onElementDragStart?.(el.id);
-                  } else if (ids.filter(id => id !== 'generation-area').length > 1) {
-                    onMultiDragStart?.(ids.filter(id => id !== 'generation-area'));
-                  } else {
-                    onElementDragStart?.(el.id);
-                  }
-                }}
-                onDragEnd={(pos) => {
-                  const ids = (selectedElementIds ?? []).filter(id => id !== 'generation-area');
-                  if (ids.length > 1 && ids.includes(el.id)) {
-                    const positions = ids
-                      .map(id => {
-                        const node = nodeRefs.current[id];
-                        return node ? { id, x: node.x(), y: node.y() } : null;
-                      })
-                      .filter(Boolean) as { id: string; x: number; y: number }[];
-                    onMultiDragEnd?.(positions);
-                  } else if (onElementDragEnd) {
-                    const snappedPos = snapEnabled ? snapWorldPosition(pos) : pos;
-                    onElementDragEnd(el.id, snappedPos);
-                  }
-                }}
-                onDragMove={(pos) => onElementPositionChange(el.id, pos)}
-                onTransformStart={() => handleTransformStart(el.id)}
-                onTransformMove={(next) => handleTransformMove(el.id, next)}
-                onTransformEnd={(finalRect) => handleTransformEnd(el.id, finalRect)}
-                registerNodeRef={(node) => { if (node) nodeRefs.current[el.id] = node; }}
-              />
-            ) : null
-          ))}
+          {[...elements].slice().reverse().map((el) => {
+            if (!el.visible) return null;
+            const commonProps = {
+              data: el,
+              isSelected: (selectedElementIds ?? []).includes(el.id),
+              draggable: interactionMode === 'select' && !el.locked,
+              dragBoundFunc: snapEnabled ? (pos: { x: number; y: number }) => snapAbsolutePosition(pos) : undefined,
+              onSelect: (e?: KonvaEventObject<MouseEvent>) => {
+                const nativeEvt = e?.evt;
+                const shift = nativeEvt?.shiftKey ?? false;
+                const ctrl = nativeEvt?.ctrlKey ?? nativeEvt?.metaKey ?? false;
+                onSelectElement(el.id, (shift || ctrl) ? { shift, ctrl } : undefined);
+              },
+              onDragStart: () => {
+                const ids = selectedElementIds ?? [];
+                if (!ids.includes(el.id)) {
+                  onSelectElement(el.id);
+                  onElementDragStart?.(el.id);
+                } else if (ids.filter(id => id !== 'generation-area').length > 1) {
+                  onMultiDragStart?.(ids.filter(id => id !== 'generation-area'));
+                } else {
+                  onElementDragStart?.(el.id);
+                }
+              },
+              onDragEnd: (pos: { x: number; y: number }) => {
+                const ids = (selectedElementIds ?? []).filter(id => id !== 'generation-area');
+                if (ids.length > 1 && ids.includes(el.id)) {
+                  const positions = ids
+                    .map(id => {
+                      const node = nodeRefs.current[id];
+                      return node ? { id, x: node.x(), y: node.y() } : null;
+                    })
+                    .filter(Boolean) as { id: string; x: number; y: number }[];
+                  onMultiDragEnd?.(positions);
+                } else if (onElementDragEnd) {
+                  const snappedPos = snapEnabled ? snapWorldPosition(pos) : pos;
+                  onElementDragEnd(el.id, snappedPos);
+                }
+              },
+              onDragMove: (pos: { x: number; y: number }) => onElementPositionChange(el.id, pos),
+              onTransformStart: () => handleTransformStart(el.id),
+              onTransformMove: (next: { x: number; y: number; width: number; height: number; rotation?: number }) => handleTransformMove(el.id, next),
+              onTransformEnd: (finalRect: { x: number; y: number; width: number; height: number; rotation?: number }) => handleTransformEnd(el.id, finalRect),
+              registerNodeRef: (node: Konva.Node | null) => { if (node) nodeRefs.current[el.id] = node; },
+            };
+            switch (el.type) {
+              case 'image':
+                return <CanvasImage key={el.id} {...commonProps} />;
+              case 'drawing':
+                return <CanvasDrawing key={el.id} {...commonProps} />;
+              case 'text':
+                return <CanvasText key={el.id} {...commonProps} onDoubleClick={() => onTextEdit?.(el.id)} isEditing={editingTextId === el.id} />;
+              default:
+                return null;
+            }
+          })}
+          {/* Active brush stroke (while drawing) */}
+          {activeStroke && (
+            <Line
+              x={activeStroke.startX}
+              y={activeStroke.startY}
+              points={activeStroke.points}
+              stroke={brushColor || '#000000'}
+              strokeWidth={brushSize || 3}
+              lineCap="round"
+              lineJoin="round"
+              tension={0.5}
+              listening={false}
+            />
+          )}
         </Layer>
         {/* Overlay layer (not exported) */}
         <Layer ref={overlayLayerRef}>

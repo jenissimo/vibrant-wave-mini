@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { ArrowDown, ArrowUp, ChevronsDown, ChevronsUp, Download, Eye, EyeOff, Trash2, Image as ImageIcon } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronsDown, ChevronsUp, Download, Eye, EyeOff, Trash2, Image as ImageIcon, Pen, Type } from 'lucide-react';
 import type { CanvasElementData } from '@/components/Canvas';
 import BaseFloatingPanel from '@/components/panels/BaseFloatingPanel';
 import { getSliceInfo } from '@/lib/sliceUtils';
@@ -66,10 +66,12 @@ const LayersPanel: React.FC<LayersPanelProps> = ({
             className={`flex items-center gap-2 px-2 py-1 rounded cursor-pointer ${selectedIds.includes(el.id) ? 'bg-accent' : 'hover:bg-accent/50'}`}
             onClick={(e) => onSelect(el.id, e.shiftKey ? { shift: true } : (e.ctrlKey || e.metaKey) ? { ctrl: true } : undefined)}
           >
-            <div className="w-6 h-6 rounded border overflow-hidden bg-muted">
+            <div className="w-6 h-6 rounded border overflow-hidden bg-muted flex items-center justify-center">
               {el.type === 'image' && el.src && (
                 <img src={el.src} alt="thumb" className="w-full h-full object-cover" />
               )}
+              {el.type === 'drawing' && <Pen className="w-3.5 h-3.5 text-muted-foreground" />}
+              {el.type === 'text' && <Type className="w-3.5 h-3.5 text-muted-foreground" />}
             </div>
             <div className="flex-1 min-w-0">
               <div className="text-xs text-foreground truncate">{el.name || `${el.type} ${el.id.slice(0,4)}`}</div>
@@ -97,9 +99,11 @@ const LayersPanel: React.FC<LayersPanelProps> = ({
                 <ArrowUp className="w-3.5 h-3.5" />
               </Button>
             </div>
-            <Button variant="ghost" size="icon" className="h-6 w-6" title="Download" onClick={(e) => { e.stopPropagation(); onDownload?.(el.id); }}>
-              <Download className="w-3.5 h-3.5" />
-            </Button>
+            {el.type === 'image' && (
+              <Button variant="ghost" size="icon" className="h-6 w-6" title="Download" onClick={(e) => { e.stopPropagation(); onDownload?.(el.id); }}>
+                <Download className="w-3.5 h-3.5" />
+              </Button>
+            )}
             <Button variant="ghost" size="icon" className="h-6 w-6" title={el.visible ? 'Hide' : 'Show'} onClick={(e) => { e.stopPropagation(); onToggleVisible(el.id); }}>
               {el.visible ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
             </Button>

@@ -37,22 +37,29 @@ export async function exportBoardToWv(docState: DocState): Promise<Blob> {
 
   // Export elements with image references
   const exportedElements: (Omit<CanvasElementData, 'src'> & { imagePath: string })[] = [];
-  
+
   for (let i = 0; i < docState.elements.length; i++) {
     const element = docState.elements[i];
     if (element.type === 'image' && element.src) {
       // Convert base64 data URL to Blob
       const blob = dataURLToBlob(element.src);
       const imagePath = `images/element_${i}.png`;
-      
+
       // Add image to zip
       imagesFolder.file(`element_${i}.png`, blob);
-      
+
       // Create exported element without src, with imagePath instead
       const { src, ...elementWithoutSrc } = element;
       exportedElements.push({
         ...elementWithoutSrc,
         imagePath,
+      });
+    } else {
+      // drawing/text: no image file, store element data directly
+      const { src, ...elementWithoutSrc } = element;
+      exportedElements.push({
+        ...elementWithoutSrc,
+        imagePath: '',
       });
     }
   }
@@ -95,7 +102,7 @@ export async function importBoardFromWv(file: File): Promise<DocState> {
       // Extract image path (e.g., "images/element_0.png" -> "element_0.png")
       const imageFileName = exportedElement.imagePath.split('/').pop() || '';
       const imageFile = zip.file(`images/${imageFileName}`);
-      
+
       if (!imageFile) {
         console.warn(`Image file not found: ${imageFileName}, skipping element`);
         continue;
@@ -111,6 +118,10 @@ export async function importBoardFromWv(file: File): Promise<DocState> {
         ...elementWithoutImagePath,
         src,
       } as CanvasElementData);
+    } else {
+      // drawing/text: restore directly without image
+      const { imagePath, ...elementWithoutImagePath } = exportedElement;
+      restoredElements.push(elementWithoutImagePath as CanvasElementData);
     }
   }
 
