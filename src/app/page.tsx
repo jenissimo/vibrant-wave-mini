@@ -137,6 +137,7 @@ export default function Home() {
     gridThickness: 1,
     gridColor: '#d1d5db',
     backgroundColor: '#f5f5f5',
+    backgroundPattern: 'dots',
     generationFillColor: '#ffffff',
   };
   const docHistory = useHistoryState({ elements: [], settings: initialSettings });
@@ -651,6 +652,7 @@ export default function Home() {
       gridThickness: 1,
       gridColor: '#d1d5db',
       backgroundColor: '#f5f5f5',
+      backgroundPattern: 'dots',
       generationFillColor: '#ffffff',
     };
     const emptyDocState = { elements: [], settings: defaultSettings };
@@ -835,6 +837,8 @@ export default function Home() {
             }}
             onOpenBoards={() => setShowBoardsPanel(!showBoardsPanel)}
             onOpenChangelog={() => setShowChangelog(!showChangelog)}
+            backgroundPattern={settings.backgroundPattern ?? 'dots'}
+            onPatternChange={(p) => updateSettings({ backgroundPattern: p })}
           />
           <input
             ref={fileInputRef}
@@ -852,6 +856,7 @@ export default function Home() {
               generationArea={generationArea}
               gridEnabled={settings.gridEnabled}
               backgroundColor={settings.backgroundColor}
+              backgroundPattern={settings.backgroundPattern ?? 'dots'}
               gridCols={settings.gridCols}
               gridRows={settings.gridRows}
               gridColor={settings.gridColor}

@@ -6,7 +6,8 @@ import CanvasImage from '@/components/canvas/CanvasImage';
 import CanvasDrawing from '@/components/canvas/CanvasDrawing';
 import CanvasText from '@/components/canvas/CanvasText';
 import CanvasSticky from '@/components/canvas/CanvasSticky';
-import usePatternDots from '@/components/canvas/usePatternDots';
+import useCanvasPattern from '@/components/canvas/useCanvasPattern';
+import type { BackgroundPattern } from '@/lib/types';
 import GenerationGrid from '@/components/canvas/GenerationGrid';
 import SelectionTransformer from '@/components/canvas/SelectionTransformer';
 import { MIN_ELEMENT_SIZE, STICKY_MIN_SIZE } from '@/lib/canvasDefaults';
@@ -56,6 +57,7 @@ interface CanvasProps {
   generationArea: { width: number; height: number; x: number; y: number };
   gridEnabled: boolean;
   backgroundColor: string; // canvas background (dotted)
+  backgroundPattern?: BackgroundPattern;
   // grid options for generation area
   gridCols: number;
   gridRows: number;
@@ -141,6 +143,7 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
   generationArea,
   gridEnabled,
   backgroundColor,
+  backgroundPattern,
   gridCols,
   gridRows,
   gridColor,
@@ -187,11 +190,11 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const { colors: themeColors, isDarkMode } = useTheme();
 
-  const { dataUrl: patternDataUrl, tile } = usePatternDots(themeColors.background);
+  const { dataUrl: patternDataUrl, tileWidth, tileHeight } = useCanvasPattern(backgroundPattern ?? 'dots', themeColors.background);
 
   const { generationAreaAligned, snapWorldPosition, snapAbsolutePosition, snapRect } = useCanvasSnapping({
     generationArea,
-    tile,
+    tile: tileWidth,
     stageX,
     stageY,
     stageScale,
@@ -212,6 +215,17 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
   useEffect(() => { stageYRef.current = stageY; }, [stageY]);
   useEffect(() => { stageScaleRef.current = stageScale; }, [stageScale]);
   useEffect(() => { elementsRef.current = elements; }, [elements]);
+
+  // --- Group drag state (for dragging selection from empty space or multi-element drag) ---
+  const groupDragRef = useRef<{
+    startWorldX: number;
+    startWorldY: number;
+    startPositions: Map<string, { x: number; y: number }>;
+    dragged: boolean;
+  } | null>(null);
+  const groupDragCleanupRef = useRef<(() => void) | null>(null);
+  const selectedElementIdsRef = useRef(selectedElementIds);
+  useEffect(() => { selectedElementIdsRef.current = selectedElementIds; }, [selectedElementIds]);
 
   // --- Active stroke state (for brush drawing) ---
   const [activeStroke, setActiveStroke] = useState<{ startX: number; startY: number; points: number[] } | null>(null);
@@ -418,15 +432,18 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
     if (!el) return;
     el.style.backgroundColor = themeColors.background;
     if (patternDataUrl) {
-      const scaledTile = Math.max(1, tile * stageScale);
+      const scaledW = Math.max(1, tileWidth * stageScale);
+      const scaledH = Math.max(1, tileHeight * stageScale);
       el.style.backgroundImage = `url(${patternDataUrl})`;
       el.style.backgroundRepeat = 'repeat';
-      el.style.backgroundSize = `${scaledTile}px ${scaledTile}px`;
+      el.style.backgroundSize = `${scaledW}px ${scaledH}px`;
       el.style.backgroundPosition = `${stageX}px ${stageY}px`;
+      el.style.imageRendering = 'crisp-edges';
     } else {
       el.style.backgroundImage = '';
+      el.style.imageRendering = '';
     }
-  }, [themeColors.background, patternDataUrl, tile, stageScale, stageX, stageY]);
+  }, [themeColors.background, patternDataUrl, tileWidth, tileHeight, stageScale, stageX, stageY]);
 
   // Keyboard nudge with arrow keys using dot step from pattern, adjusted by zoom
   useEffect(() => {
@@ -445,7 +462,7 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
       if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(key)) return;
       e.preventDefault();
 
-      const snapStep = tile / 2;
+      const snapStep = tileWidth / 2;
       let dx = 0, dy = 0;
       if (key === 'ArrowUp') dy = -snapStep;
       if (key === 'ArrowDown') dy = snapStep;
@@ -464,7 +481,7 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [elements, selectedElementIds, interactionMode, tile, stageScale, onElementPositionChange, onElementNudge]);
+  }, [elements, selectedElementIds, interactionMode, tileWidth, stageScale, onElementPositionChange, onElementNudge]);
 
   // Attach transformer to selected nodes (supports multi-select)
   useEffect(() => {
@@ -519,6 +536,85 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
     onElementTransformEnd?.(id, next);
   }, [onElementTransform, onElementTransformEnd, snapEnabled, snapRect]);
 
+  // --- Group drag: drag all selected elements from empty space inside bounding box ---
+  const startGroupDrag = useCallback((startWorldX: number, startWorldY: number, ids: string[]) => {
+    const startPositions = new Map<string, { x: number; y: number }>();
+    for (const id of ids) {
+      const node = nodeRefs.current[id];
+      if (node) startPositions.set(id, { x: node.x(), y: node.y() });
+    }
+
+    onMultiDragStart?.(ids);
+    groupDragRef.current = { startWorldX, startWorldY, startPositions, dragged: false };
+
+    const handleMove = (me: MouseEvent) => {
+      const stg = stageRef.current;
+      if (!stg) return;
+      const container = stg.container().getBoundingClientRect();
+      const pointerX = me.clientX - container.left;
+      const pointerY = me.clientY - container.top;
+      const curWorldX = (pointerX - stageXRef.current) / stageScaleRef.current;
+      const curWorldY = (pointerY - stageYRef.current) / stageScaleRef.current;
+
+      let dx = curWorldX - startWorldX;
+      let dy = curWorldY - startWorldY;
+
+      if (!groupDragRef.current!.dragged && Math.abs(dx) < 2 && Math.abs(dy) < 2) return;
+      groupDragRef.current!.dragged = true;
+
+      // Snap the group as a whole: snap one reference element, derive delta
+      if (snapEnabled) {
+        const refId = ids[0];
+        const refStart = startPositions.get(refId);
+        if (refStart) {
+          const snapped = snapWorldPosition({ x: refStart.x + dx, y: refStart.y + dy });
+          dx = snapped.x - refStart.x;
+          dy = snapped.y - refStart.y;
+        }
+      }
+
+      for (const id of ids) {
+        const start = startPositions.get(id);
+        const node = nodeRefs.current[id];
+        if (start && node) {
+          node.x(start.x + dx);
+          node.y(start.y + dy);
+        }
+      }
+      // Move the transformer along with elements
+      const tr = transformerRef.current;
+      if (tr) tr.getLayer()?.batchDraw();
+    };
+
+    const handleUp = () => {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+      groupDragCleanupRef.current = null;
+
+      if (groupDragRef.current?.dragged) {
+        const positions = ids
+          .map(id => {
+            const node = nodeRefs.current[id];
+            return node ? { id, x: node.x(), y: node.y() } : null;
+          })
+          .filter(Boolean) as { id: string; x: number; y: number }[];
+        onMultiDragEnd?.(positions);
+      } else {
+        // Click without drag inside bounding box — deselect
+        onSelectElement(null);
+      }
+
+      groupDragRef.current = null;
+    };
+
+    groupDragCleanupRef.current = () => {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+    };
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+  }, [onMultiDragStart, onMultiDragEnd, onSelectElement, snapEnabled, snapWorldPosition]);
+
   // --- Marquee: start tracking on mousedown on empty space ---
   const startMarqueeTracking = useCallback((e: KonvaEventObject<MouseEvent>) => {
     if (interactionMode !== 'select') return;
@@ -535,6 +631,30 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
 
     const worldX = (pointer.x - stageXRef.current) / stageScaleRef.current;
     const worldY = (pointer.y - stageYRef.current) / stageScaleRef.current;
+
+    // If clicking on empty space (Stage or generation-area) inside the bounding box of selected elements, start group drag instead
+    // Shift bypasses this — allows marquee to add/remove from selection
+    if ((isStage || isGenArea) && !e.evt.shiftKey) {
+      const selIds = (selectedElementIdsRef.current ?? []).filter(id => id !== 'generation-area');
+      if (selIds.length > 0) {
+        const selElements = elementsRef.current.filter(el => selIds.includes(el.id) && el.visible);
+        if (selElements.length > 0) {
+          let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+          for (const el of selElements) {
+            const aabb = getElementAABB(el);
+            minX = Math.min(minX, aabb.x);
+            minY = Math.min(minY, aabb.y);
+            maxX = Math.max(maxX, aabb.x + aabb.w);
+            maxY = Math.max(maxY, aabb.y + aabb.h);
+          }
+          if (worldX >= minX && worldX <= maxX && worldY >= minY && worldY <= maxY) {
+            startGroupDrag(worldX, worldY, selIds);
+            return;
+          }
+        }
+      }
+    }
+
     marqueeStartRef.current = { worldX, worldY, screenX: e.evt.clientX, screenY: e.evt.clientY };
     marqueeTargetRef.current = isGenArea ? 'generation-area' : 'stage';
     marqueeRectRef.current = null;
@@ -603,7 +723,7 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
     marqueeCleanupRef.current = removeListeners;
     window.addEventListener('mousemove', handleMarqueeMove);
     window.addEventListener('mouseup', handleMarqueeUp);
-  }, [interactionMode, onSelectElement, onMarqueeSelect]);
+  }, [interactionMode, onSelectElement, onMarqueeSelect, startGroupDrag]);
 
   // --- Brush drawing ---
   const startDrawing = useCallback((e: KonvaEventObject<MouseEvent>) => {
@@ -786,7 +906,19 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
                   onSelectElement(el.id);
                   onElementDragStart?.(el.id);
                 } else if (ids.filter(id => id !== 'generation-area').length > 1) {
-                  onMultiDragStart?.(ids.filter(id => id !== 'generation-area'));
+                  const multiIds = ids.filter(id => id !== 'generation-area');
+                  onMultiDragStart?.(multiIds);
+                  // Save initial positions for synced multi-element drag
+                  const startPositions = new Map<string, { x: number; y: number }>();
+                  for (const id of multiIds) {
+                    const node = nodeRefs.current[id];
+                    if (node) startPositions.set(id, { x: node.x(), y: node.y() });
+                  }
+                  groupDragRef.current = {
+                    startWorldX: 0, startWorldY: 0,
+                    startPositions,
+                    dragged: true,
+                  };
                 } else {
                   onElementDragStart?.(el.id);
                 }
@@ -805,8 +937,29 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
                   const snappedPos = snapEnabled ? snapWorldPosition(pos) : pos;
                   onElementDragEnd(el.id, snappedPos);
                 }
+                groupDragRef.current = null;
               },
-              onDragMove: (pos: { x: number; y: number }) => onElementPositionChange(el.id, pos),
+              onDragMove: (pos: { x: number; y: number }) => {
+                onElementPositionChange(el.id, pos);
+                // Sync other selected elements during multi-drag
+                const gd = groupDragRef.current;
+                if (gd && gd.startPositions.size > 0) {
+                  const myStart = gd.startPositions.get(el.id);
+                  if (myStart) {
+                    const dx = pos.x - myStart.x;
+                    const dy = pos.y - myStart.y;
+                    const ids = (selectedElementIdsRef.current ?? []).filter(id => id !== 'generation-area' && id !== el.id);
+                    for (const id of ids) {
+                      const start = gd.startPositions.get(id);
+                      const node = nodeRefs.current[id];
+                      if (start && node) {
+                        node.x(start.x + dx);
+                        node.y(start.y + dy);
+                      }
+                    }
+                  }
+                }
+              },
               onTransformStart: () => handleTransformStart(el.id),
               onTransformMove: (next: { x: number; y: number; width: number; height: number; rotation?: number }) => handleTransformMove(el.id, next),
               onTransformEnd: (finalRect: { x: number; y: number; width: number; height: number; rotation?: number }) => handleTransformEnd(el.id, finalRect),

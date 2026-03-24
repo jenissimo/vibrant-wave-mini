@@ -1,5 +1,7 @@
 import type { CanvasElementData } from '@/components/Canvas';
 
+export type BackgroundPattern = 'none' | 'dots' | 'grid' | 'cross' | 'crossDot' | 'isometric';
+
 export type DocSettings = {
   aspectRatio: string;
   gridEnabled: boolean;
@@ -8,6 +10,7 @@ export type DocSettings = {
   gridThickness: number;
   gridColor: string;
   backgroundColor: string;
+  backgroundPattern: BackgroundPattern;
   generationFillColor: string;
 };
 
