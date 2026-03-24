@@ -10,6 +10,8 @@ interface CanvasLeftToolbarProps {
   onColorChange: (color: string) => void;
   size: number;
   onSizeChange: (size: number) => void;
+  sizeMin?: number;
+  sizeMax?: number;
 }
 
 const tools: { mode: InteractionMode; icon: React.ElementType; label: string; hotkey: string }[] = [
@@ -29,6 +31,8 @@ const CanvasLeftToolbar: React.FC<CanvasLeftToolbarProps> = ({
   onColorChange,
   size,
   onSizeChange,
+  sizeMin = 1,
+  sizeMax = 50,
 }) => {
   const colorInputRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -130,8 +134,8 @@ const CanvasLeftToolbar: React.FC<CanvasLeftToolbarProps> = ({
           <div className="flex flex-col items-center gap-0.5 mt-0.5" title={`Size: ${size}`}>
             <input
               type="range"
-              min={1}
-              max={50}
+              min={sizeMin}
+              max={sizeMax}
               value={size}
               onChange={(e) => onSizeChange(Number(e.target.value))}
               className="w-6 accent-primary"

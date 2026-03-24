@@ -141,7 +141,7 @@ export function useGlobalHotkeys(args: {
           const newIds: string[] = [];
           const commands: Command[] = [];
           for (const el of internalElements) {
-            const id = `el_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
+            const id = crypto.randomUUID();
             commands.push(new AddElementCommand({
               ...el,
               id,
@@ -188,7 +188,7 @@ export function useGlobalHotkeys(args: {
           const newIds: string[] = [];
           const commands: Command[] = [];
           for (const el of internalElements) {
-            const id = `el_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
+            const id = crypto.randomUUID();
             commands.push(new AddElementCommand({
               ...el,
               id,

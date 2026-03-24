@@ -51,15 +51,25 @@ function TextEditOverlay({ editingTextId, elements, canvasRef, onFinalize }: {
 }) {
   const el = elements.find(e => e.id === editingTextId);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [screenPos, setScreenPos] = useState<{ x: number; y: number; scale: number } | null>(null);
+
+  // Recompute position on every animation frame to track zoom/pan
+  useEffect(() => {
+    let rafId: number;
+    const update = () => {
+      const pos = canvasRef.current?.getScreenPosition(el?.x ?? 0, el?.y ?? 0);
+      if (pos) setScreenPos(pos);
+      rafId = requestAnimationFrame(update);
+    };
+    update();
+    return () => cancelAnimationFrame(rafId);
+  }, [editingTextId, el?.x, el?.y, canvasRef]);
 
   useEffect(() => {
-    // Focus on next tick to ensure element is mounted
     requestAnimationFrame(() => textareaRef.current?.focus());
   }, [editingTextId]);
 
-  if (!el || el.type !== 'text') return null;
-  const screenPos = canvasRef.current?.getScreenPosition(el.x, el.y);
-  if (!screenPos) return null;
+  if (!el || el.type !== 'text' || !screenPos) return null;
 
   return (
     <textarea
@@ -210,13 +220,13 @@ export default function Home() {
     const h = Math.max(1, img.height * ratio);
     const x = (generationArea.width - w) / 2;
     const y = (generationArea.height - h) / 2;
-    const id = `el_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
-    const newElement: CanvasElementData = { 
-      id, 
-      type: 'image', 
-      src: imageUrl, 
-      x, 
-      y, 
+    const id = crypto.randomUUID();
+    const newElement: CanvasElementData = {
+      id,
+      type: 'image',
+      src: imageUrl,
+      x,
+      y,
       width: w, 
       height: h, 
       originalWidth: img.width,
@@ -648,8 +658,11 @@ export default function Home() {
     commandManager.execute(new AddElementCommand(element));
   }, []);
 
+  // Track pending text element id (created but not yet confirmed)
+  const pendingTextIdRef = useRef<string | null>(null);
+
   const handleTextCreate = useCallback((worldPos: { x: number; y: number }) => {
-    const id = `el_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const id = crypto.randomUUID();
     const element: CanvasElementData = {
       id,
       type: 'text',
@@ -665,24 +678,32 @@ export default function Home() {
       locked: false,
     };
     commandManager.execute(new AddElementCommand(element));
+    pendingTextIdRef.current = id;
     setSelectedElementIds([id]);
     setEditingTextId(id);
   }, [textFontSize, textColor]);
 
   const handleTextEdit = useCallback((id: string) => {
+    pendingTextIdRef.current = null;
     setEditingTextId(id);
   }, []);
 
   const finalizeTextEdit = useCallback((id: string, newText: string) => {
     const el = elements.find(e => e.id === id);
-    if (!el) { setEditingTextId(null); return; }
+    if (!el) { setEditingTextId(null); pendingTextIdRef.current = null; return; }
     if (!newText.trim()) {
-      commandManager.execute(new RemoveElementCommand(id));
+      // Undo the AddElement instead of creating a separate RemoveElement
+      if (pendingTextIdRef.current === id) {
+        commandManager.undo();
+      } else {
+        commandManager.execute(new RemoveElementCommand(id));
+      }
       setSelectedElementIds([]);
     } else if (newText !== el.text) {
       commandManager.execute(new UpdateElementCommand(id, { text: el.text }, { text: newText }));
     }
     setEditingTextId(null);
+    pendingTextIdRef.current = null;
   }, [elements]);
 
   return (
@@ -710,6 +731,8 @@ export default function Home() {
             onColorChange={interactionMode === 'text' ? setTextColor : setBrushColor}
             size={interactionMode === 'text' ? textFontSize : brushSize}
             onSizeChange={interactionMode === 'text' ? setTextFontSize : setBrushSize}
+            sizeMin={interactionMode === 'text' ? 8 : 1}
+            sizeMax={interactionMode === 'text' ? 200 : 50}
           />
           {/* Canvas top toolbar (actions) */}
           <CanvasTopToolbar

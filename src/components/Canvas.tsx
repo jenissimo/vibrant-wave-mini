@@ -495,7 +495,7 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
       rotation: node.rotation?.() ?? 0,
     };
     // Scale drawing points proportionally
-    const el = elements.find(e => e.id === id);
+    const el = elementsRef.current.find(e => e.id === id);
     if (el?.type === 'drawing' && el.points) {
       next.points = el.points.map((val, i) => val * (i % 2 === 0 ? scaleX : scaleY));
     }
@@ -507,7 +507,7 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
     }
     onElementTransform?.(id, next);
     onElementTransformEnd?.(id, next);
-  }, [onElementTransform, onElementTransformEnd, snapEnabled, snapRect, elements]);
+  }, [onElementTransform, onElementTransformEnd, snapEnabled, snapRect]);
 
   // --- Marquee: start tracking on mousedown on empty space ---
   const startMarqueeTracking = useCallback((e: KonvaEventObject<MouseEvent>) => {
@@ -641,18 +641,19 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
 
       if (!current || current.points.length < 4) return;
 
-      // Compute bounding box and normalize points
+      // Compute bounding box and normalize points (iterative to avoid stack overflow on large strokes)
       const pts = current.points;
-      const xs = pts.filter((_, i) => i % 2 === 0);
-      const ys = pts.filter((_, i) => i % 2 === 1);
-      const minX = Math.min(...xs), maxX = Math.max(...xs);
-      const minY = Math.min(...ys), maxY = Math.max(...ys);
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      for (let i = 0; i < pts.length; i++) {
+        if (i % 2 === 0) { if (pts[i] < minX) minX = pts[i]; if (pts[i] > maxX) maxX = pts[i]; }
+        else { if (pts[i] < minY) minY = pts[i]; if (pts[i] > maxY) maxY = pts[i]; }
+      }
       const w = Math.max(1, maxX - minX);
       const h = Math.max(1, maxY - minY);
       const normalizedPoints = pts.map((val, i) => val - (i % 2 === 0 ? minX : minY));
 
       const element: CanvasElementData = {
-        id: `el_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        id: crypto.randomUUID(),
         type: 'drawing',
         x: current.startX + minX,
         y: current.startY + minY,

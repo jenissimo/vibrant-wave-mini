@@ -36,7 +36,7 @@ export async function exportBoardToWv(docState: DocState): Promise<Blob> {
   }
 
   // Export elements with image references
-  const exportedElements: (Omit<CanvasElementData, 'src'> & { imagePath: string })[] = [];
+  const exportedElements: (Omit<CanvasElementData, 'src'> & { imagePath?: string })[] = [];
 
   for (let i = 0; i < docState.elements.length; i++) {
     const element = docState.elements[i];
@@ -57,10 +57,7 @@ export async function exportBoardToWv(docState: DocState): Promise<Blob> {
     } else {
       // drawing/text: no image file, store element data directly
       const { src, ...elementWithoutSrc } = element;
-      exportedElements.push({
-        ...elementWithoutSrc,
-        imagePath: '',
-      });
+      exportedElements.push(elementWithoutSrc);
     }
   }
 
@@ -90,7 +87,7 @@ export async function importBoardFromWv(file: File): Promise<DocState> {
   const boardJsonText = await boardJsonFile.async('string');
   const boardData = JSON.parse(boardJsonText) as {
     version?: string;
-    elements: (Omit<CanvasElementData, 'src'> & { imagePath: string })[];
+    elements: (Omit<CanvasElementData, 'src'> & { imagePath?: string })[];
     settings: DocSettings;
   };
 

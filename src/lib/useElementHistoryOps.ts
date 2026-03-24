@@ -91,7 +91,7 @@ export function useElementHistoryOps() {
   };
 
   const addElementFromRef = async (src: string, generationArea: { x: number; y: number; width: number; height: number }) => {
-    const id = `el_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
+    const id = crypto.randomUUID();
     
     // Load image to get original dimensions
     const img = new Image();
