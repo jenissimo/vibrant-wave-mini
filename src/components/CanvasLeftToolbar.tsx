@@ -1,5 +1,5 @@
 import React, { useRef, useState, useCallback, useEffect } from 'react';
-import { MousePointer, Hand, Pen, Type, GripVertical } from 'lucide-react';
+import { MousePointer, Hand, Pen, Type, GripHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { InteractionMode } from '@/components/Canvas';
 
@@ -38,7 +38,7 @@ const CanvasLeftToolbar: React.FC<CanvasLeftToolbarProps> = ({
   const panelRef = useRef<HTMLDivElement>(null);
   const showControls = interactionMode === 'brush' || interactionMode === 'text';
 
-  const [pos, setPos] = useState({ x: 12, y: 56 });
+  const [pos, setPos] = useState({ x: 12, y: 68 });
   const [dragging, setDragging] = useState(false);
   const dragOffset = useRef({ x: 0, y: 0 });
 
@@ -85,7 +85,7 @@ const CanvasLeftToolbar: React.FC<CanvasLeftToolbarProps> = ({
         onMouseDown={handleMouseDown}
         title="Drag to move"
       >
-        <GripVertical size={14} />
+        <GripHorizontal size={14} />
       </div>
       <div className="w-5 h-px bg-border my-0.5" />
       {tools.map((t) => (
