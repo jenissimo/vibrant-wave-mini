@@ -1,7 +1,8 @@
 import React, { useRef, useState, useCallback, useEffect } from 'react';
-import { MousePointer, Hand, Pen, Type, GripHorizontal } from 'lucide-react';
+import { MousePointer, Hand, Pen, Type, StickyNote, GripHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { InteractionMode } from '@/components/Canvas';
+import { STICKY_COLORS } from '@/lib/canvasDefaults';
 
 interface CanvasLeftToolbarProps {
   interactionMode: InteractionMode;
@@ -12,6 +13,10 @@ interface CanvasLeftToolbarProps {
   onSizeChange: (size: number) => void;
   sizeMin?: number;
   sizeMax?: number;
+  stickyColor?: string;
+  onStickyColorChange?: (color: string) => void;
+  stickyShape?: 'square' | 'horizontal';
+  onStickyShapeChange?: (shape: 'square' | 'horizontal') => void;
 }
 
 const tools: { mode: InteractionMode; icon: React.ElementType; label: string; hotkey: string }[] = [
@@ -22,6 +27,7 @@ const tools: { mode: InteractionMode; icon: React.ElementType; label: string; ho
 const drawTools: { mode: InteractionMode; icon: React.ElementType; label: string; hotkey: string }[] = [
   { mode: 'brush', icon: Pen, label: 'Brush', hotkey: 'B' },
   { mode: 'text', icon: Type, label: 'Text', hotkey: 'T' },
+  { mode: 'sticky', icon: StickyNote, label: 'Sticky Note', hotkey: 'S' },
 ];
 
 const CanvasLeftToolbar: React.FC<CanvasLeftToolbarProps> = ({
@@ -33,10 +39,15 @@ const CanvasLeftToolbar: React.FC<CanvasLeftToolbarProps> = ({
   onSizeChange,
   sizeMin = 1,
   sizeMax = 50,
+  stickyColor = '#FEF08A',
+  onStickyColorChange,
+  stickyShape = 'square',
+  onStickyShapeChange,
 }) => {
   const colorInputRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-  const showControls = interactionMode === 'brush' || interactionMode === 'text';
+  const showBrushTextControls = interactionMode === 'brush' || interactionMode === 'text';
+  const showStickyControls = interactionMode === 'sticky';
 
   const [pos, setPos] = useState({ x: 12, y: 68 });
   const [dragging, setDragging] = useState(false);
@@ -113,7 +124,7 @@ const CanvasLeftToolbar: React.FC<CanvasLeftToolbarProps> = ({
           <t.icon size={16} />
         </Button>
       ))}
-      {showControls && (
+      {showBrushTextControls && (
         <>
           <div className="w-5 h-px bg-border my-0.5" />
           {/* Color picker */}
@@ -142,6 +153,45 @@ const CanvasLeftToolbar: React.FC<CanvasLeftToolbarProps> = ({
               style={{ writingMode: 'vertical-lr', direction: 'rtl', height: '64px' }}
             />
             <span className="text-[10px] text-muted-foreground">{size}</span>
+          </div>
+        </>
+      )}
+      {showStickyControls && (
+        <>
+          <div className="w-5 h-px bg-border my-0.5" />
+          {/* Shape selector */}
+          <div className="flex flex-col items-center gap-1">
+            <button
+              className={`w-7 h-7 rounded border border-border flex items-center justify-center transition-shadow ${stickyShape === 'square' ? 'ring-2 ring-primary bg-accent' : 'hover:bg-accent/50'}`}
+              onClick={() => onStickyShapeChange?.('square')}
+              title="Square"
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <rect x="1" y="1" width="12" height="12" rx="1.5" />
+              </svg>
+            </button>
+            <button
+              className={`w-7 h-7 rounded border border-border flex items-center justify-center transition-shadow ${stickyShape === 'horizontal' ? 'ring-2 ring-primary bg-accent' : 'hover:bg-accent/50'}`}
+              onClick={() => onStickyShapeChange?.('horizontal')}
+              title="Horizontal"
+            >
+              <svg width="16" height="10" viewBox="0 0 16 10" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <rect x="1" y="1" width="14" height="8" rx="1.5" />
+              </svg>
+            </button>
+          </div>
+          <div className="w-5 h-px bg-border my-0.5" />
+          {/* Color swatches */}
+          <div className="flex flex-col items-center gap-1">
+            {STICKY_COLORS.map((c) => (
+              <button
+                key={c.hex}
+                className={`w-5 h-5 rounded-sm border border-border/50 cursor-pointer transition-shadow ${stickyColor === c.hex ? 'ring-2 ring-primary ring-offset-1' : 'hover:ring-1 hover:ring-primary'}`}
+                style={{ backgroundColor: c.hex }}
+                onClick={() => onStickyColorChange?.(c.hex)}
+                title={c.name}
+              />
+            ))}
           </div>
         </>
       )}

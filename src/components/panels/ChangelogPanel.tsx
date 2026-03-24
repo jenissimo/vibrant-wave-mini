@@ -10,6 +10,20 @@ interface ChangelogEntry {
 
 const changelog: ChangelogEntry[] = [
   {
+    date: 'March 24, 2026 (v2)',
+    changes: [
+      'Sticky Notes tool (S): square and horizontal variants with colored backgrounds',
+      'Sticky toolbar: shape selector, 7 color swatches for quick theming',
+      'Double-click sticky to edit text, Enter inserts newline, Escape confirms',
+      'Empty sticky notes persist (unlike text elements)',
+      'Bold and Italic text styling for sticky notes and text elements',
+      'Element Settings panel: shape switcher, background color, font style controls',
+      'Sticky notes in Layers panel with dedicated icon',
+      'Auto-switch to Select tool after placing a sticky note',
+      'App font changed to Inter with full Cyrillic support',
+    ],
+  },
+  {
     date: 'March 24, 2026',
     changes: [
       'Board name displayed in top toolbar with click-to-edit inline rename',

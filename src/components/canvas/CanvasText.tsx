@@ -22,7 +22,8 @@ export default function CanvasText(props: CanvasTextProps) {
       height={data.height}
       text={data.text || ''}
       fontSize={data.fontSize || 24}
-      fontFamily={data.fontFamily || 'Arial'}
+      fontFamily={data.fontFamily || 'Inter'}
+      fontStyle={data.fontStyle || 'normal'}
       fill={data.fill || '#000000'}
       rotation={data.rotation || 0}
       opacity={isEditing ? 0 : 1}

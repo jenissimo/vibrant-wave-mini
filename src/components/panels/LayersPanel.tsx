@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { ArrowDown, ArrowUp, ChevronsDown, ChevronsUp, Download, Eye, EyeOff, Trash2, Image as ImageIcon, Pen, Type } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronsDown, ChevronsUp, Download, Eye, EyeOff, Trash2, Image as ImageIcon, Pen, Type, StickyNote } from 'lucide-react';
 import type { CanvasElementData } from '@/components/Canvas';
 import BaseFloatingPanel from '@/components/panels/BaseFloatingPanel';
 import { getSliceInfo } from '@/lib/sliceUtils';
@@ -72,6 +72,7 @@ const LayersPanel: React.FC<LayersPanelProps> = ({
               )}
               {el.type === 'drawing' && <Pen className="w-3.5 h-3.5 text-muted-foreground" />}
               {el.type === 'text' && <Type className="w-3.5 h-3.5 text-muted-foreground" />}
+              {el.type === 'sticky' && <StickyNote className="w-3.5 h-3.5 text-muted-foreground" />}
             </div>
             <div className="flex-1 min-w-0">
               <div className="text-xs text-foreground truncate">{el.name || `${el.type} ${el.id.slice(0,4)}`}</div>

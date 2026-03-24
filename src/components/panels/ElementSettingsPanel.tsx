@@ -3,13 +3,14 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
-import { Download } from 'lucide-react';
+import { Download, Bold, Italic } from 'lucide-react';
 import BaseFloatingPanel from '@/components/panels/BaseFloatingPanel';
 import type { CanvasElementData } from '@/components/Canvas';
 import { commandManager } from '@/lib/commandManager';
 import { SliceElementCommand } from '@/lib/commands/SliceElementCommand';
 import { settingsStore } from '@/lib/settingsStore';
 import { exportSliceAsImage, isSlice } from '@/lib/sliceUtils';
+import { STICKY_COLORS, STICKY_SQUARE, STICKY_HORIZONTAL, STICKY_DEFAULT_COLOR } from '@/lib/canvasDefaults';
 
 interface ElementSettingsPanelProps {
   element: CanvasElementData;
@@ -142,6 +143,111 @@ const ElementSettingsPanel: React.FC<ElementSettingsPanelProps> = ({ element, on
                     onChange={(e) => onChange({ fill: e.target.value })}
                     className="w-full h-8 rounded border cursor-pointer"
                   />
+                </div>
+              </div>
+            </div>
+          )}
+          {/* Sticky-specific settings */}
+          {element.type === 'sticky' && (
+            <div className="space-y-2 border-t pt-2">
+              <div className="space-y-1">
+                <Label className="text-xs">Shape</Label>
+                <div className="flex gap-1">
+                  <Button
+                    variant={element.stickyShape === 'square' || !element.stickyShape ? 'default' : 'outline'}
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => onChange({ stickyShape: 'square', width: STICKY_SQUARE.width, height: STICKY_SQUARE.height })}
+                  >
+                    Square
+                  </Button>
+                  <Button
+                    variant={element.stickyShape === 'horizontal' ? 'default' : 'outline'}
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => onChange({ stickyShape: 'horizontal', width: STICKY_HORIZONTAL.width, height: STICKY_HORIZONTAL.height })}
+                  >
+                    Horizontal
+                  </Button>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Text</Label>
+                <textarea
+                  className="w-full text-xs border rounded px-2 py-1 bg-background resize-none"
+                  rows={3}
+                  value={element.text || ''}
+                  onChange={(e) => onChange({ text: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Background</Label>
+                <div className="flex gap-1 flex-wrap">
+                  {STICKY_COLORS.map((c) => (
+                    <button
+                      key={c.hex}
+                      className={`w-6 h-6 rounded-sm border ${element.stickyColor === c.hex ? 'ring-2 ring-primary' : 'border-border/50'}`}
+                      style={{ backgroundColor: c.hex }}
+                      onClick={() => onChange({ stickyColor: c.hex })}
+                      title={c.name}
+                    />
+                  ))}
+                  <input
+                    type="color"
+                    value={element.stickyColor || STICKY_DEFAULT_COLOR}
+                    onChange={(e) => onChange({ stickyColor: e.target.value })}
+                    className="w-6 h-6 rounded border cursor-pointer"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-xs">Font Size</Label>
+                  <Input type="number" min={8} max={72} value={element.fontSize || 16} onChange={(e) => onChange({ fontSize: parseFloat(e.target.value || '16') })} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Text Color</Label>
+                  <input
+                    type="color"
+                    value={element.fill || '#000000'}
+                    onChange={(e) => onChange({ fill: e.target.value })}
+                    className="w-full h-8 rounded border cursor-pointer"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Style</Label>
+                <div className="flex gap-1">
+                  <Button
+                    variant={(element.fontStyle || '').includes('bold') ? 'default' : 'outline'}
+                    size="sm"
+                    className="h-7 w-7 p-0"
+                    onClick={() => {
+                      const current = element.fontStyle || 'normal';
+                      const hasBold = current.includes('bold');
+                      const hasItalic = current.includes('italic');
+                      const next = [!hasBold ? 'bold' : '', hasItalic ? 'italic' : ''].filter(Boolean).join(' ') || 'normal';
+                      onChange({ fontStyle: next });
+                    }}
+                    title="Bold"
+                  >
+                    <Bold className="w-3.5 h-3.5" />
+                  </Button>
+                  <Button
+                    variant={(element.fontStyle || '').includes('italic') ? 'default' : 'outline'}
+                    size="sm"
+                    className="h-7 w-7 p-0"
+                    onClick={() => {
+                      const current = element.fontStyle || 'normal';
+                      const hasBold = current.includes('bold');
+                      const hasItalic = current.includes('italic');
+                      const next = [hasBold ? 'bold' : '', !hasItalic ? 'italic' : ''].filter(Boolean).join(' ') || 'normal';
+                      onChange({ fontStyle: next });
+                    }}
+                    title="Italic"
+                  >
+                    <Italic className="w-3.5 h-3.5" />
+                  </Button>
                 </div>
               </div>
             </div>

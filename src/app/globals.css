@@ -36,7 +36,7 @@
 
 :root {
   /* Fonts: system stack (avoids next/font + Turbopack resolution bug) */
-  --font-geist-sans: ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-geist-sans: "Inter", ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
   --font-geist-mono: ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, monospace;
 
   /*

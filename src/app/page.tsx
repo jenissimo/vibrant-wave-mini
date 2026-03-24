@@ -29,6 +29,7 @@ import { UpdateElementCommand } from '@/lib/commands/UpdateElementCommand';
 import { AddElementCommand } from '@/lib/commands/AddElementCommand';
 import { RemoveElementCommand } from '@/lib/commands/RemoveElementCommand';
 import { CanvasElementData, InteractionMode } from '@/components/Canvas';
+import { STICKY_SQUARE, STICKY_HORIZONTAL, STICKY_DEFAULT_FONT_SIZE, STICKY_PADDING, STICKY_CORNER_RADIUS, STICKY_DEFAULT_COLOR } from '@/lib/canvasDefaults';
 import { exportSliceAsImage, isSlice } from '@/lib/sliceUtils';
 import { insertImageToCanvas, getImageFromFile, isImageFile } from '@/lib/imageUtils';
 import {
@@ -70,7 +71,11 @@ function TextEditOverlay({ editingTextId, elements, canvasRef, onFinalize }: {
     requestAnimationFrame(() => textareaRef.current?.focus());
   }, [editingTextId]);
 
-  if (!el || el.type !== 'text' || !screenPos) return null;
+  if (!el || (el.type !== 'text' && el.type !== 'sticky') || !screenPos) return null;
+
+  const isSticky = el.type === 'sticky';
+  const pad = isSticky ? STICKY_PADDING * screenPos.scale : 0;
+  const defaultFontSize = isSticky ? STICKY_DEFAULT_FONT_SIZE : 24;
 
   return (
     <textarea
@@ -78,15 +83,20 @@ function TextEditOverlay({ editingTextId, elements, canvasRef, onFinalize }: {
       defaultValue={el.text || ''}
       style={{
         position: 'absolute',
-        left: screenPos.x,
-        top: screenPos.y,
-        fontSize: `${(el.fontSize || 24) * screenPos.scale}px`,
-        fontFamily: el.fontFamily || 'Arial',
+        left: screenPos.x + pad,
+        top: screenPos.y + pad,
+        fontSize: `${(el.fontSize || defaultFontSize) * screenPos.scale}px`,
+        fontFamily: el.fontFamily || 'Inter',
+        fontWeight: (el.fontStyle || '').includes('bold') ? 'bold' : 'normal',
+        fontStyle: (el.fontStyle || '').includes('italic') ? 'italic' : 'normal',
         color: el.fill || '#000000',
-        width: `${(el.width || 200) * screenPos.scale}px`,
-        minHeight: `${(el.fontSize || 24) * 1.5 * screenPos.scale}px`,
-        background: 'transparent',
-        border: '1px dashed var(--border)',
+        width: `${((isSticky ? el.width - 2 * STICKY_PADDING : el.width) || 200) * screenPos.scale}px`,
+        minHeight: isSticky
+          ? `${((el.height - 2 * STICKY_PADDING) || 100) * screenPos.scale}px`
+          : `${(el.fontSize || 24) * 1.5 * screenPos.scale}px`,
+        background: isSticky ? (el.stickyColor || STICKY_DEFAULT_COLOR) : 'transparent',
+        border: isSticky ? 'none' : '1px dashed var(--border)',
+        borderRadius: isSticky ? `${STICKY_CORNER_RADIUS * screenPos.scale}px` : undefined,
         outline: 'none',
         resize: 'none',
         overflow: 'hidden',
@@ -96,6 +106,7 @@ function TextEditOverlay({ editingTextId, elements, canvasRef, onFinalize }: {
         padding: 0,
         margin: 0,
         lineHeight: '1.2',
+        textAlign: isSticky ? 'center' : undefined,
       }}
       onBlur={(e) => onFinalize(editingTextId, e.target.value)}
       onKeyDown={(e) => {
@@ -103,7 +114,8 @@ function TextEditOverlay({ editingTextId, elements, canvasRef, onFinalize }: {
           e.preventDefault();
           onFinalize(editingTextId, e.currentTarget.value);
         }
-        if (e.key === 'Enter' && !e.shiftKey) {
+        // For sticky notes, Enter inserts newline; for text, Enter finalizes
+        if (e.key === 'Enter' && !e.shiftKey && !isSticky) {
           e.preventDefault();
           onFinalize(editingTextId, e.currentTarget.value);
         }
@@ -135,6 +147,8 @@ export default function Home() {
   const [brushSize, setBrushSize] = useState(3);
   const [textColor, setTextColor] = useState('#000000');
   const [textFontSize, setTextFontSize] = useState(24);
+  const [stickyColor, setStickyColor] = useState(STICKY_DEFAULT_COLOR);
+  const [stickyShape, setStickyShape] = useState<'square' | 'horizontal'>('square');
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
   const [snapEnabled, setSnapEnabled] = useState<boolean>(true);
   const { isHydrated } = useTheme();
@@ -677,7 +691,7 @@ export default function Home() {
       height: textFontSize * 1.5,
       text: '',
       fontSize: textFontSize,
-      fontFamily: 'Arial',
+      fontFamily: 'Inter',
       fill: textColor,
       visible: true,
       locked: false,
@@ -693,17 +707,54 @@ export default function Home() {
     setEditingTextId(id);
   }, []);
 
+  const handleStickyCreate = useCallback((worldPos: { x: number; y: number }) => {
+    const id = crypto.randomUUID();
+    const size = stickyShape === 'square' ? STICKY_SQUARE : STICKY_HORIZONTAL;
+    const element: CanvasElementData = {
+      id,
+      type: 'sticky',
+      x: worldPos.x - size.width / 2,
+      y: worldPos.y - size.height / 2,
+      width: size.width,
+      height: size.height,
+      text: '',
+      fontSize: STICKY_DEFAULT_FONT_SIZE,
+      fontFamily: 'Inter',
+      fill: '#000000',
+      stickyColor,
+      stickyShape,
+      visible: true,
+      locked: false,
+    };
+    commandManager.execute(new AddElementCommand(element));
+    pendingTextIdRef.current = id;
+    setSelectedElementIds([id]);
+    setEditingTextId(id);
+    setInteractionMode('select');
+  }, [stickyColor, stickyShape]);
+
+  const handleStickyEdit = useCallback((id: string) => {
+    pendingTextIdRef.current = null;
+    setEditingTextId(id);
+  }, []);
+
   const finalizeTextEdit = useCallback((id: string, newText: string) => {
     const el = elements.find(e => e.id === id);
     if (!el) { setEditingTextId(null); pendingTextIdRef.current = null; return; }
     if (!newText.trim()) {
-      // Undo the AddElement instead of creating a separate RemoveElement
-      if (pendingTextIdRef.current === id) {
+      if (el.type === 'sticky') {
+        // Sticky notes persist when empty — just clear text if it changed
+        if (el.text) {
+          commandManager.execute(new UpdateElementCommand(id, { text: el.text }, { text: '' }));
+        }
+      } else if (pendingTextIdRef.current === id) {
+        // Undo the AddElement instead of creating a separate RemoveElement
         commandManager.undo();
+        setSelectedElementIds([]);
       } else {
         commandManager.execute(new RemoveElementCommand(id));
+        setSelectedElementIds([]);
       }
-      setSelectedElementIds([]);
     } else if (newText !== el.text) {
       commandManager.execute(new UpdateElementCommand(id, { text: el.text }, { text: newText }));
     }
@@ -738,6 +789,10 @@ export default function Home() {
             onSizeChange={interactionMode === 'text' ? setTextFontSize : setBrushSize}
             sizeMin={interactionMode === 'text' ? 8 : 1}
             sizeMax={interactionMode === 'text' ? 200 : 50}
+            stickyColor={stickyColor}
+            onStickyColorChange={setStickyColor}
+            stickyShape={stickyShape}
+            onStickyShapeChange={setStickyShape}
           />
           {/* Canvas top toolbar (actions) */}
           <CanvasTopToolbar
@@ -822,6 +877,8 @@ export default function Home() {
               onDrawingComplete={handleDrawingComplete}
               onTextCreate={handleTextCreate}
               onTextEdit={handleTextEdit}
+              onStickyCreate={handleStickyCreate}
+              onStickyEdit={handleStickyEdit}
               editingTextId={editingTextId}
               onImageDrop={async (file, position) => {
                 if (!isImageFile(file)) return;
@@ -892,9 +949,11 @@ export default function Home() {
               <ElementSettingsPanel
                 element={el}
                 onChange={(updates)=> {
-                  const oldProps = (({ x, y, width, height, rotation, visible, locked, src, name }) => ({ x, y, width, height, rotation, visible, locked, src, name }))(el);
-                  const newProps = { ...oldProps, ...updates };
-                  commandManager.execute(new UpdateElementCommand(el.id, oldProps, newProps));
+                  const oldProps: Partial<CanvasElementData> = {};
+                  for (const key of Object.keys(updates) as (keyof CanvasElementData)[]) {
+                    (oldProps as Record<string, unknown>)[key] = el[key];
+                  }
+                  commandManager.execute(new UpdateElementCommand(el.id, oldProps, updates));
                 }}
                 onDelete={()=>{ removeElement(el.id); setSelectedElementIds([]); }}
                 onDuplicate={()=>{
