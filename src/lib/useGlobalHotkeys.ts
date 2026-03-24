@@ -93,15 +93,16 @@ export function useGlobalHotkeys(args: {
 
       const selectedElements = elements.filter(el => selectedElementIds.includes(el.id));
       if (selectedElements.length > 0) {
+        e.preventDefault();
+
         // 1. Internal clipboard (all selected elements)
         clipboardManager.copyMany(selectedElements);
+        clipboardManager.markAsInternalCopy();
 
-        // 2. System clipboard (first image element only) - but mark as internal copy
+        // 2. System clipboard (first image element only)
         const firstImage = selectedElements.find(el => el.type === 'image' && el.src);
         if (firstImage && firstImage.src) {
           try {
-            e.preventDefault();
-
             let imageSrc: string;
             if (isSlice(firstImage)) {
               imageSrc = await exportSliceAsImage(firstImage);
@@ -113,9 +114,6 @@ export function useGlobalHotkeys(args: {
             const blob = await response.blob();
             const clipboardItem = new ClipboardItem({ [blob.type]: blob });
             await navigator.clipboard.write([clipboardItem]);
-
-            // Mark that we just copied from canvas
-            clipboardManager.markAsInternalCopy();
           } catch (err) {
             console.error('Failed to copy image to system clipboard:', err);
           }

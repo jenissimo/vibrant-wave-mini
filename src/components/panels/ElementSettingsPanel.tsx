@@ -200,20 +200,14 @@ const ElementSettingsPanel: React.FC<ElementSettingsPanelProps> = ({ element, on
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <Label className="text-xs">Font Size</Label>
-                  <Input type="number" min={8} max={72} value={element.fontSize || 16} onChange={(e) => onChange({ fontSize: parseFloat(e.target.value || '16') })} />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Text Color</Label>
-                  <input
-                    type="color"
-                    value={element.fill || '#000000'}
-                    onChange={(e) => onChange({ fill: e.target.value })}
-                    className="w-full h-8 rounded border cursor-pointer"
-                  />
-                </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Text Color</Label>
+                <input
+                  type="color"
+                  value={element.fill || '#000000'}
+                  onChange={(e) => onChange({ fill: e.target.value })}
+                  className="w-full h-8 rounded border cursor-pointer"
+                />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Style</Label>

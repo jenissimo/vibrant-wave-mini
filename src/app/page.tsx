@@ -29,7 +29,8 @@ import { UpdateElementCommand } from '@/lib/commands/UpdateElementCommand';
 import { AddElementCommand } from '@/lib/commands/AddElementCommand';
 import { RemoveElementCommand } from '@/lib/commands/RemoveElementCommand';
 import { CanvasElementData, InteractionMode } from '@/components/Canvas';
-import { STICKY_SQUARE, STICKY_HORIZONTAL, STICKY_DEFAULT_FONT_SIZE, STICKY_PADDING, STICKY_CORNER_RADIUS, STICKY_DEFAULT_COLOR } from '@/lib/canvasDefaults';
+import { STICKY_SQUARE, STICKY_HORIZONTAL, STICKY_PADDING, STICKY_CORNER_RADIUS, STICKY_DEFAULT_COLOR } from '@/lib/canvasDefaults';
+import { calcStickyFontSize } from '@/lib/calcStickyFontSize';
 import { exportSliceAsImage, isSlice } from '@/lib/sliceUtils';
 import { insertImageToCanvas, getImageFromFile, isImageFile } from '@/lib/imageUtils';
 import {
@@ -75,7 +76,9 @@ function TextEditOverlay({ editingTextId, elements, canvasRef, onFinalize }: {
 
   const isSticky = el.type === 'sticky';
   const pad = isSticky ? STICKY_PADDING * screenPos.scale : 0;
-  const defaultFontSize = isSticky ? STICKY_DEFAULT_FONT_SIZE : 24;
+  const defaultFontSize = isSticky
+    ? calcStickyFontSize(el.text || '', el.width, el.height, el.fontFamily || 'Inter', el.fontStyle || 'normal', STICKY_PADDING)
+    : 24;
 
   return (
     <textarea
@@ -85,7 +88,7 @@ function TextEditOverlay({ editingTextId, elements, canvasRef, onFinalize }: {
         position: 'absolute',
         left: screenPos.x + pad,
         top: screenPos.y + pad,
-        fontSize: `${(el.fontSize || defaultFontSize) * screenPos.scale}px`,
+        fontSize: `${(isSticky ? defaultFontSize : (el.fontSize || defaultFontSize)) * screenPos.scale}px`,
         fontFamily: el.fontFamily || 'Inter',
         fontWeight: (el.fontStyle || '').includes('bold') ? 'bold' : 'normal',
         fontStyle: (el.fontStyle || '').includes('italic') ? 'italic' : 'normal',
@@ -718,7 +721,6 @@ export default function Home() {
       width: size.width,
       height: size.height,
       text: '',
-      fontSize: STICKY_DEFAULT_FONT_SIZE,
       fontFamily: 'Inter',
       fill: '#000000',
       stickyColor,

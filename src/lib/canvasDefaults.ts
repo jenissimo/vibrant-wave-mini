@@ -12,7 +12,6 @@ export const STICKY_COLORS = [
 ];
 export const STICKY_SQUARE = { width: 200, height: 200 };
 export const STICKY_HORIZONTAL = { width: 300, height: 150 };
-export const STICKY_DEFAULT_FONT_SIZE = 16;
 export const STICKY_PADDING = 12;
 export const STICKY_CORNER_RADIUS = 8;
 export const STICKY_DEFAULT_COLOR = '#FEF08A';

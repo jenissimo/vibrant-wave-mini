@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Group, Rect, Text } from 'react-konva';
 import type Konva from 'konva';
 import type { CanvasElementData } from '@/components/Canvas';
 import { useCanvasElementEvents, type CanvasElementEventProps } from '@/components/canvas/useCanvasElementEvents';
 import { STICKY_PADDING, STICKY_CORNER_RADIUS, STICKY_DEFAULT_COLOR } from '@/lib/canvasDefaults';
+import { calcStickyFontSize } from '@/lib/calcStickyFontSize';
+import { useFontsLoaded } from '@/lib/useFontsLoaded';
 
 interface CanvasStickyProps extends CanvasElementEventProps {
   onDoubleClick?: () => void;
@@ -16,6 +18,12 @@ export default function CanvasSticky(props: CanvasStickyProps) {
 
   const bgColor = data.stickyColor || STICKY_DEFAULT_COLOR;
   const textPad = STICKY_PADDING;
+  const fontsLoaded = useFontsLoaded();
+  const fontSize = useMemo(
+    () => calcStickyFontSize(data.text || '', data.width, data.height, data.fontFamily || 'Inter', data.fontStyle || 'normal', textPad),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fontsLoaded invalidates cached font metrics
+    [data.text, data.width, data.height, data.fontFamily, data.fontStyle, textPad, fontsLoaded],
+  );
 
   return (
     <Group
@@ -47,7 +55,7 @@ export default function CanvasSticky(props: CanvasStickyProps) {
         width={Math.max(1, data.width - 2 * textPad)}
         height={Math.max(1, data.height - 2 * textPad)}
         text={data.text || ''}
-        fontSize={data.fontSize || 16}
+        fontSize={fontSize}
         fontFamily={data.fontFamily || 'Inter'}
         fontStyle={data.fontStyle || 'normal'}
         fill={data.fill || '#000000'}
