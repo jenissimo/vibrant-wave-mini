@@ -3,14 +3,15 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
-import { Download, Bold, Italic } from 'lucide-react';
+import { Download, Bold, Italic, AlignLeft, AlignCenter, AlignRight } from 'lucide-react';
 import BaseFloatingPanel from '@/components/panels/BaseFloatingPanel';
 import type { CanvasElementData } from '@/components/Canvas';
 import { commandManager } from '@/lib/commandManager';
 import { SliceElementCommand } from '@/lib/commands/SliceElementCommand';
 import { settingsStore } from '@/lib/settingsStore';
 import { exportSliceAsImage, isSlice } from '@/lib/sliceUtils';
-import { STICKY_COLORS, STICKY_SQUARE, STICKY_HORIZONTAL, STICKY_DEFAULT_COLOR } from '@/lib/canvasDefaults';
+import { STICKY_COLORS, STICKY_SQUARE, STICKY_HORIZONTAL, STICKY_DEFAULT_COLOR, SHAPE_DEFAULT_BG, SHAPE_DEFAULT_BORDER, SHAPE_DEFAULT_BORDER_WIDTH, SHAPE_DEFAULT_CORNER_RADIUS, SHAPE_DEFAULT_PADDING } from '@/lib/canvasDefaults';
+import type { ShapeType } from '@/components/Canvas';
 
 interface ElementSettingsPanelProps {
   element: CanvasElementData;
@@ -244,6 +245,145 @@ const ElementSettingsPanel: React.FC<ElementSettingsPanelProps> = ({ element, on
                   </Button>
                 </div>
               </div>
+            </div>
+          )}
+          {/* Shape-specific settings */}
+          {element.type === 'shape' && (
+            <div className="space-y-2 border-t pt-2">
+              <div className="space-y-1">
+                <Label className="text-xs">Shape</Label>
+                <div className="flex gap-1 flex-wrap">
+                  {(['rectangle', 'roundedRect', 'ellipse', 'diamond', 'triangle'] as ShapeType[]).map((st) => (
+                    <Button
+                      key={st}
+                      variant={element.shapeType === st ? 'default' : 'outline'}
+                      size="sm"
+                      className="h-7 px-2 text-[10px]"
+                      onClick={() => onChange({ shapeType: st })}
+                    >
+                      {st === 'roundedRect' ? 'Rounded' : st.charAt(0).toUpperCase() + st.slice(1)}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Text</Label>
+                <textarea
+                  className="w-full text-xs border rounded px-2 py-1 bg-background resize-none"
+                  rows={3}
+                  value={element.text || ''}
+                  onChange={(e) => onChange({ text: e.target.value })}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-xs">Font Size</Label>
+                  <Input type="number" min={8} max={200} value={element.fontSize || 16} onChange={(e) => onChange({ fontSize: parseFloat(e.target.value || '16') })} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Text Color</Label>
+                  <input
+                    type="color"
+                    value={element.fill || '#000000'}
+                    onChange={(e) => onChange({ fill: e.target.value })}
+                    className="w-full h-8 rounded border cursor-pointer"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Text Align</Label>
+                <div className="flex gap-1">
+                  <Button
+                    variant={element.textAlign === 'left' ? 'default' : 'outline'}
+                    size="sm"
+                    className="h-7 w-7 p-0"
+                    onClick={() => onChange({ textAlign: 'left' })}
+                  >
+                    <AlignLeft className="w-3.5 h-3.5" />
+                  </Button>
+                  <Button
+                    variant={(element.textAlign || 'center') === 'center' ? 'default' : 'outline'}
+                    size="sm"
+                    className="h-7 w-7 p-0"
+                    onClick={() => onChange({ textAlign: 'center' })}
+                  >
+                    <AlignCenter className="w-3.5 h-3.5" />
+                  </Button>
+                  <Button
+                    variant={element.textAlign === 'right' ? 'default' : 'outline'}
+                    size="sm"
+                    className="h-7 w-7 p-0"
+                    onClick={() => onChange({ textAlign: 'right' })}
+                  >
+                    <AlignRight className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Style</Label>
+                <div className="flex gap-1">
+                  <Button
+                    variant={(element.fontStyle || '').includes('bold') ? 'default' : 'outline'}
+                    size="sm"
+                    className="h-7 w-7 p-0"
+                    onClick={() => {
+                      const current = element.fontStyle || 'normal';
+                      const hasBold = current.includes('bold');
+                      const hasItalic = current.includes('italic');
+                      const next = [!hasBold ? 'bold' : '', hasItalic ? 'italic' : ''].filter(Boolean).join(' ') || 'normal';
+                      onChange({ fontStyle: next });
+                    }}
+                    title="Bold"
+                  >
+                    <Bold className="w-3.5 h-3.5" />
+                  </Button>
+                  <Button
+                    variant={(element.fontStyle || '').includes('italic') ? 'default' : 'outline'}
+                    size="sm"
+                    className="h-7 w-7 p-0"
+                    onClick={() => {
+                      const current = element.fontStyle || 'normal';
+                      const hasBold = current.includes('bold');
+                      const hasItalic = current.includes('italic');
+                      const next = [hasBold ? 'bold' : '', !hasItalic ? 'italic' : ''].filter(Boolean).join(' ') || 'normal';
+                      onChange({ fontStyle: next });
+                    }}
+                    title="Italic"
+                  >
+                    <Italic className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Background</Label>
+                <input
+                  type="color"
+                  value={element.bgColor || SHAPE_DEFAULT_BG}
+                  onChange={(e) => onChange({ bgColor: e.target.value })}
+                  className="w-full h-8 rounded border cursor-pointer"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-xs">Border Color</Label>
+                  <input
+                    type="color"
+                    value={element.borderColor || SHAPE_DEFAULT_BORDER}
+                    onChange={(e) => onChange({ borderColor: e.target.value })}
+                    className="w-full h-8 rounded border cursor-pointer"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Border Width</Label>
+                  <Input type="number" min={0} max={20} value={element.borderWidth ?? SHAPE_DEFAULT_BORDER_WIDTH} onChange={(e) => onChange({ borderWidth: parseFloat(e.target.value || '2') })} />
+                </div>
+              </div>
+              {element.shapeType === 'roundedRect' && (
+                <div className="space-y-1">
+                  <Label className="text-xs">Corner Radius</Label>
+                  <Input type="number" min={0} max={100} value={element.cornerRadius ?? SHAPE_DEFAULT_CORNER_RADIUS} onChange={(e) => onChange({ cornerRadius: parseFloat(e.target.value || '12') })} />
+                </div>
+              )}
             </div>
           )}
           <div className="flex justify-between pt-1">

@@ -6,19 +6,22 @@ import CanvasImage from '@/components/canvas/CanvasImage';
 import CanvasDrawing from '@/components/canvas/CanvasDrawing';
 import CanvasText from '@/components/canvas/CanvasText';
 import CanvasSticky from '@/components/canvas/CanvasSticky';
+import CanvasShape from '@/components/canvas/CanvasShape';
 import useCanvasPattern from '@/components/canvas/useCanvasPattern';
 import type { BackgroundPattern } from '@/lib/types';
 import GenerationGrid from '@/components/canvas/GenerationGrid';
 import SelectionTransformer from '@/components/canvas/SelectionTransformer';
-import { MIN_ELEMENT_SIZE, STICKY_MIN_SIZE } from '@/lib/canvasDefaults';
+import { MIN_ELEMENT_SIZE, STICKY_MIN_SIZE, SHAPE_MIN_SIZE } from '@/lib/canvasDefaults';
 import { useCanvasSnapping } from '@/lib/useCanvasSnapping';
 import { useTheme } from '@/lib/useTheme';
+import { getEffectiveVisible, getEffectiveLocked } from '@/lib/groupUtils';
 
-export type InteractionMode = 'select' | 'pan' | 'brush' | 'text' | 'sticky';
+export type InteractionMode = 'select' | 'pan' | 'brush' | 'text' | 'sticky' | 'shape';
+export type ShapeType = 'rectangle' | 'roundedRect' | 'ellipse' | 'diamond' | 'triangle';
 
 export interface CanvasElementData {
   id: string;
-  type: 'image' | 'drawing' | 'text' | 'sticky';
+  type: 'image' | 'drawing' | 'text' | 'sticky' | 'shape' | 'group';
   // Common
   x: number;
   y: number;
@@ -49,6 +52,18 @@ export interface CanvasElementData {
   // Sticky-specific
   stickyColor?: string;    // background hex color
   stickyShape?: 'square' | 'horizontal';
+  // Shape-specific
+  shapeType?: ShapeType;
+  bgColor?: string;        // shape fill color
+  borderColor?: string;    // shape stroke color
+  borderWidth?: number;    // shape stroke width
+  cornerRadius?: number;   // for roundedRect
+  textAlign?: 'left' | 'center' | 'right';
+  verticalAlign?: 'top' | 'middle' | 'bottom';
+  padding?: number;        // text padding inside shape
+  // Group-specific
+  groupId?: string;        // parent group ID
+  collapsed?: boolean;     // collapsed in layers panel
 }
 
 interface CanvasProps {
@@ -97,6 +112,8 @@ interface CanvasProps {
   onTextEdit?: (id: string) => void;
   onStickyCreate?: (worldPos: { x: number; y: number }) => void;
   onStickyEdit?: (id: string) => void;
+  onShapeCreate?: (worldPos: { x: number; y: number }) => void;
+  onShapeEdit?: (id: string) => void;
   editingTextId?: string | null;
 }
 
@@ -174,6 +191,8 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
   onTextEdit,
   onStickyCreate,
   onStickyEdit,
+  onShapeCreate,
+  onShapeEdit,
   editingTextId,
 }, ref) => {
   const stageRef = useRef<Konva.Stage | null>(null);
@@ -512,7 +531,7 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
     const scaleX = node.scaleX() || 1;
     const scaleY = node.scaleY() || 1;
     const el = elementsRef.current.find(e => e.id === id);
-    const minSize = el?.type === 'sticky' ? STICKY_MIN_SIZE : MIN_ELEMENT_SIZE;
+    const minSize = el?.type === 'sticky' ? STICKY_MIN_SIZE : el?.type === 'shape' ? SHAPE_MIN_SIZE : MIN_ELEMENT_SIZE;
     const nextWidth = Math.max(minSize, node.width() * scaleX);
     const nextHeight = Math.max(minSize, node.height() * scaleY);
     let next: { x: number; y: number; width: number; height: number; rotation?: number; points?: number[] } = {
@@ -700,7 +719,7 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
         const marquee = { x: finalRect.x, y: finalRect.y, w: finalRect.width, h: finalRect.height };
         const currentElements = elementsRef.current;
         const intersectedIds = currentElements
-          .filter(el => el.visible)
+          .filter(el => el.type !== 'group' && getEffectiveVisible(el, currentElements))
           .filter(el => rectsIntersect(getElementAABB(el), marquee))
           .map(el => el.id);
 
@@ -868,6 +887,7 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
           else if (interactionMode === 'brush') startDrawing(e);
           else if (interactionMode === 'text') handleCreationClick(e, onTextCreate);
           else if (interactionMode === 'sticky') handleCreationClick(e, onStickyCreate);
+          else if (interactionMode === 'shape') handleCreationClick(e, onShapeCreate);
         }}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseLeave}
@@ -888,11 +908,12 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
           {renderGenerationGrid()}
           {/* Elements render (not clipped visually; export crops to area) */}
           {[...elements].slice().reverse().map((el) => {
-            if (!el.visible) return null;
+            if (el.type === 'group') return null;
+            if (!getEffectiveVisible(el, elements)) return null;
             const commonProps = {
               data: el,
               isSelected: (selectedElementIds ?? []).includes(el.id),
-              draggable: interactionMode === 'select' && !el.locked,
+              draggable: interactionMode === 'select' && !getEffectiveLocked(el, elements),
               dragBoundFunc: snapEnabled ? (pos: { x: number; y: number }) => snapAbsolutePosition(pos) : undefined,
               onSelect: (e?: KonvaEventObject<MouseEvent>) => {
                 const nativeEvt = e?.evt;
@@ -974,6 +995,8 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
                 return <CanvasText key={el.id} {...commonProps} onDoubleClick={() => onTextEdit?.(el.id)} isEditing={editingTextId === el.id} />;
               case 'sticky':
                 return <CanvasSticky key={el.id} {...commonProps} onDoubleClick={() => onStickyEdit?.(el.id)} isEditing={editingTextId === el.id} />;
+              case 'shape':
+                return <CanvasShape key={el.id} {...commonProps} onDoubleClick={() => onShapeEdit?.(el.id)} isEditing={editingTextId === el.id} />;
               default:
                 return null;
             }

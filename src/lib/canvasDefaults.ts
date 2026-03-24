@@ -15,3 +15,13 @@ export const STICKY_HORIZONTAL = { width: 300, height: 150 };
 export const STICKY_PADDING = 12;
 export const STICKY_CORNER_RADIUS = 8;
 export const STICKY_DEFAULT_COLOR = '#FEF08A';
+
+// Shape primitives
+export const SHAPE_DEFAULT_SIZE = { width: 160, height: 100 };
+export const SHAPE_MIN_SIZE = 30;
+export const SHAPE_DEFAULT_BG = '#ffffff';
+export const SHAPE_DEFAULT_BORDER = '#374151';
+export const SHAPE_DEFAULT_BORDER_WIDTH = 2;
+export const SHAPE_DEFAULT_CORNER_RADIUS = 12;
+export const SHAPE_DEFAULT_PADDING = 8;
+export const SHAPE_TYPES = ['rectangle', 'roundedRect', 'ellipse', 'diamond', 'triangle'] as const;

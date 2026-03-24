@@ -10,6 +10,22 @@ interface ChangelogEntry {
 
 const changelog: ChangelogEntry[] = [
   {
+    date: 'March 24, 2026 (v3)',
+    changes: [
+      'Shape primitives tool (R): Rectangle, Rounded Rect, Ellipse, Diamond, Triangle',
+      'Shapes toolbar: dropdown shape picker, fill and border color controls',
+      'Double-click shapes to add/edit text inside with word-wrap and alignment',
+      'Shape settings: background, border color/width, corner radius, text align, bold/italic',
+      'Layer Groups: select elements and Ctrl+G to group, Ctrl+Shift+G to ungroup',
+      'Figma-style group selection: click selects group, double-click enters group',
+      'Layers panel: collapsible group hierarchy with folder icons',
+      'Group/Ungroup buttons in Layers panel header',
+      'Group visibility and delete propagate to all children',
+      'Copy-paste preserves group structure with ID remapping',
+      'Marquee selection auto-expands to include full groups',
+    ],
+  },
+  {
     date: 'March 24, 2026 (v2)',
     changes: [
       'Sticky Notes tool (S): square and horizontal variants with colored backgrounds',

@@ -25,16 +25,29 @@ export function useGlobalHotkeys(args: {
   setInteractionMode: (mode: InteractionMode) => void;
   brushSize: number;
   setBrushSize: (size: number) => void;
+  onGroup?: () => void;
+  onUngroup?: () => void;
 }) {
-  const { enabled, selectedElementIds, elements, removeElement, addElement, addReference, setSelectedElementIds, undo, redo, activeFocus, interactionMode, setInteractionMode, brushSize, setBrushSize } = args;
+  const { enabled, selectedElementIds, elements, removeElement, addElement, addReference, setSelectedElementIds, undo, redo, activeFocus, interactionMode, setInteractionMode, brushSize, setBrushSize, onGroup, onUngroup } = args;
 
   const deleteSelected = () => {
     const ids = selectedElementIds.filter(id => id !== 'generation-area');
     if (ids.length === 0) return;
-    if (ids.length === 1) {
-      removeElement(ids[0]);
+    // Expand to include group children when deleting groups
+    const allIds = new Set(ids);
+    for (const id of ids) {
+      const el = elements.find(e => e.id === id);
+      if (el?.type === 'group') {
+        for (const child of elements) {
+          if (child.groupId === id) allIds.add(child.id);
+        }
+      }
+    }
+    const idsArr = Array.from(allIds);
+    if (idsArr.length === 1) {
+      removeElement(idsArr[0]);
     } else {
-      commandManager.execute(new CompositeCommand(ids.map(id => new RemoveElementCommand(id))));
+      commandManager.execute(new CompositeCommand(idsArr.map(id => new RemoveElementCommand(id))));
     }
     setSelectedElementIds([]);
   };
@@ -80,6 +93,11 @@ export function useGlobalHotkeys(args: {
     { key: 'b', handler: () => setInteractionMode('brush') },
     { key: 't', handler: () => setInteractionMode('text') },
     { key: 's', handler: () => setInteractionMode('sticky') },
+    { key: 'r', handler: () => setInteractionMode('shape') },
+    { key: 'g', ctrl: true, handler: () => onGroup?.() },
+    { key: 'g', meta: true, handler: () => onGroup?.() },
+    { key: 'G', ctrl: true, shift: true, handler: () => onUngroup?.() },
+    { key: 'G', meta: true, shift: true, handler: () => onUngroup?.() },
     { key: '[', handler: () => setBrushSize(Math.max(1, brushSize - (brushSize > 10 ? 5 : 1))) },
     { key: ']', handler: () => setBrushSize(Math.min(50, brushSize + (brushSize >= 10 ? 5 : 1))) },
   ], enabled);
@@ -91,7 +109,21 @@ export function useGlobalHotkeys(args: {
     const handleCopy = async (e: ClipboardEvent) => {
       if (activeFocus !== 'canvas' || selectedElementIds.length === 0) return;
 
-      const selectedElements = elements.filter(el => selectedElementIds.includes(el.id));
+      let selectedElements = elements.filter(el => selectedElementIds.includes(el.id));
+      // Include group elements if all their children are selected
+      const groupIds = new Set<string>();
+      for (const el of selectedElements) {
+        if (el.groupId) groupIds.add(el.groupId);
+      }
+      for (const gid of groupIds) {
+        const group = elements.find(e => e.id === gid);
+        if (group && !selectedElements.includes(group)) {
+          const children = elements.filter(e => e.groupId === gid);
+          if (children.every(c => selectedElements.includes(c))) {
+            selectedElements = [group, ...selectedElements];
+          }
+        }
+      }
       if (selectedElements.length > 0) {
         e.preventDefault();
 
@@ -121,6 +153,39 @@ export function useGlobalHotkeys(args: {
       }
     };
 
+    const pasteElements = (internalElements: Partial<CanvasElementData>[]) => {
+      // Build ID remap for groups
+      const idRemap = new Map<string, string>();
+      for (const el of internalElements) {
+        if (el.type === 'group' && el.id) {
+          idRemap.set(el.id, crypto.randomUUID());
+        }
+      }
+
+      const newIds: string[] = [];
+      const commands: Command[] = [];
+      for (const el of internalElements) {
+        const id = (el.type === 'group' && el.id && idRemap.has(el.id))
+          ? idRemap.get(el.id)!
+          : crypto.randomUUID();
+        const groupId = el.groupId ? idRemap.get(el.groupId) : undefined;
+        commands.push(new AddElementCommand({
+          ...el,
+          id,
+          groupId,
+          x: (el.x ?? 0) + 16,
+          y: (el.y ?? 0) + 16,
+        } as CanvasElementData));
+        newIds.push(id);
+      }
+      if (commands.length === 1) {
+        commandManager.execute(commands[0]);
+      } else {
+        commandManager.execute(new CompositeCommand(commands));
+      }
+      setSelectedElementIds(newIds);
+    };
+
     const handlePaste = async (e: ClipboardEvent) => {
       if (!activeFocus) return;
 
@@ -137,24 +202,7 @@ export function useGlobalHotkeys(args: {
 
         // If we have internal elements and it's from our copy, prioritize it
         if (isInternalCopy && internalElements.length > 0) {
-          const newIds: string[] = [];
-          const commands: Command[] = [];
-          for (const el of internalElements) {
-            const id = crypto.randomUUID();
-            commands.push(new AddElementCommand({
-              ...el,
-              id,
-              x: el.x + 16,
-              y: el.y + 16,
-            } as CanvasElementData));
-            newIds.push(id);
-          }
-          if (commands.length === 1) {
-            commandManager.execute(commands[0]);
-          } else {
-            commandManager.execute(new CompositeCommand(commands));
-          }
-          setSelectedElementIds(newIds);
+          pasteElements(internalElements);
           clipboardManager.clear();
           return;
         }
@@ -184,24 +232,7 @@ export function useGlobalHotkeys(args: {
 
         // If no system image found, try internal clipboard as fallback
         if (!hasSystemImage && internalElements.length > 0) {
-          const newIds: string[] = [];
-          const commands: Command[] = [];
-          for (const el of internalElements) {
-            const id = crypto.randomUUID();
-            commands.push(new AddElementCommand({
-              ...el,
-              id,
-              x: el.x + 16,
-              y: el.y + 16,
-            } as CanvasElementData));
-            newIds.push(id);
-          }
-          if (commands.length === 1) {
-            commandManager.execute(commands[0]);
-          } else {
-            commandManager.execute(new CompositeCommand(commands));
-          }
-          setSelectedElementIds(newIds);
+          pasteElements(internalElements);
         }
         return;
       }

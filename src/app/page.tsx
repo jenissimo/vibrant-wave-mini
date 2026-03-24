@@ -28,8 +28,11 @@ import { UpdateSettingsCommand } from '@/lib/commands/UpdateSettingsCommand';
 import { UpdateElementCommand } from '@/lib/commands/UpdateElementCommand';
 import { AddElementCommand } from '@/lib/commands/AddElementCommand';
 import { RemoveElementCommand } from '@/lib/commands/RemoveElementCommand';
-import { CanvasElementData, InteractionMode } from '@/components/Canvas';
-import { STICKY_SQUARE, STICKY_HORIZONTAL, STICKY_PADDING, STICKY_CORNER_RADIUS, STICKY_DEFAULT_COLOR } from '@/lib/canvasDefaults';
+import { CompositeCommand } from '@/lib/commands/CompositeCommand';
+import { CanvasElementData, InteractionMode, ShapeType } from '@/components/Canvas';
+import { STICKY_SQUARE, STICKY_HORIZONTAL, STICKY_PADDING, STICKY_CORNER_RADIUS, STICKY_DEFAULT_COLOR, SHAPE_DEFAULT_SIZE, SHAPE_DEFAULT_BG, SHAPE_DEFAULT_BORDER, SHAPE_DEFAULT_BORDER_WIDTH, SHAPE_DEFAULT_PADDING } from '@/lib/canvasDefaults';
+import { getGroupChildIds, expandSelectionToGroups } from '@/lib/groupUtils';
+import { GroupElementsCommand, UngroupCommand } from '@/lib/commands/GroupElementsCommand';
 import { calcStickyFontSize } from '@/lib/calcStickyFontSize';
 import { exportSliceAsImage, isSlice } from '@/lib/sliceUtils';
 import { insertImageToCanvas, getImageFromFile, isImageFile } from '@/lib/imageUtils';
@@ -72,13 +75,18 @@ function TextEditOverlay({ editingTextId, elements, canvasRef, onFinalize }: {
     requestAnimationFrame(() => textareaRef.current?.focus());
   }, [editingTextId]);
 
-  if (!el || (el.type !== 'text' && el.type !== 'sticky') || !screenPos) return null;
+  if (!el || (el.type !== 'text' && el.type !== 'sticky' && el.type !== 'shape') || !screenPos) return null;
 
   const isSticky = el.type === 'sticky';
-  const pad = isSticky ? STICKY_PADDING * screenPos.scale : 0;
+  const isShape = el.type === 'shape';
+  const shapePad = isShape ? (el.padding ?? SHAPE_DEFAULT_PADDING) : 0;
+  const pad = isSticky ? STICKY_PADDING * screenPos.scale : isShape ? shapePad * screenPos.scale : 0;
   const defaultFontSize = isSticky
     ? calcStickyFontSize(el.text || '', el.width, el.height, el.fontFamily || 'Inter', el.fontStyle || 'normal', STICKY_PADDING)
     : 24;
+
+  const innerWidth = isSticky ? el.width - 2 * STICKY_PADDING : isShape ? el.width - 2 * shapePad : el.width;
+  const innerHeight = isSticky ? el.height - 2 * STICKY_PADDING : isShape ? el.height - 2 * shapePad : (el.fontSize || 24) * 1.5;
 
   return (
     <textarea
@@ -93,13 +101,13 @@ function TextEditOverlay({ editingTextId, elements, canvasRef, onFinalize }: {
         fontWeight: (el.fontStyle || '').includes('bold') ? 'bold' : 'normal',
         fontStyle: (el.fontStyle || '').includes('italic') ? 'italic' : 'normal',
         color: el.fill || '#000000',
-        width: `${((isSticky ? el.width - 2 * STICKY_PADDING : el.width) || 200) * screenPos.scale}px`,
-        minHeight: isSticky
-          ? `${((el.height - 2 * STICKY_PADDING) || 100) * screenPos.scale}px`
-          : `${(el.fontSize || 24) * 1.5 * screenPos.scale}px`,
-        background: isSticky ? (el.stickyColor || STICKY_DEFAULT_COLOR) : 'transparent',
-        border: isSticky ? 'none' : '1px dashed var(--border)',
-        borderRadius: isSticky ? `${STICKY_CORNER_RADIUS * screenPos.scale}px` : undefined,
+        width: `${(innerWidth || 200) * screenPos.scale}px`,
+        minHeight: `${(innerHeight || 100) * screenPos.scale}px`,
+        background: isSticky ? (el.stickyColor || STICKY_DEFAULT_COLOR) : isShape ? (el.bgColor || SHAPE_DEFAULT_BG) : 'transparent',
+        border: isSticky || isShape ? 'none' : '1px dashed var(--border)',
+        borderRadius: isSticky ? `${STICKY_CORNER_RADIUS * screenPos.scale}px`
+          : (isShape && el.shapeType === 'roundedRect') ? `${(el.cornerRadius ?? 12) * screenPos.scale}px`
+          : undefined,
         outline: 'none',
         resize: 'none',
         overflow: 'hidden',
@@ -109,7 +117,7 @@ function TextEditOverlay({ editingTextId, elements, canvasRef, onFinalize }: {
         padding: 0,
         margin: 0,
         lineHeight: '1.2',
-        textAlign: isSticky ? 'center' : undefined,
+        textAlign: isSticky ? 'center' : isShape ? (el.textAlign || 'center') : undefined,
       }}
       onBlur={(e) => onFinalize(editingTextId, e.target.value)}
       onKeyDown={(e) => {
@@ -117,8 +125,8 @@ function TextEditOverlay({ editingTextId, elements, canvasRef, onFinalize }: {
           e.preventDefault();
           onFinalize(editingTextId, e.currentTarget.value);
         }
-        // For sticky notes, Enter inserts newline; for text, Enter finalizes
-        if (e.key === 'Enter' && !e.shiftKey && !isSticky) {
+        // For sticky notes and shapes, Enter inserts newline; for text, Enter finalizes
+        if (e.key === 'Enter' && !e.shiftKey && !isSticky && !isShape) {
           e.preventDefault();
           onFinalize(editingTextId, e.currentTarget.value);
         }
@@ -153,7 +161,11 @@ export default function Home() {
   const [textFontSize, setTextFontSize] = useState(24);
   const [stickyColor, setStickyColor] = useState(STICKY_DEFAULT_COLOR);
   const [stickyShape, setStickyShape] = useState<'square' | 'horizontal'>('square');
+  const [shapeType, setShapeType] = useState<ShapeType>('rectangle');
+  const [shapeBgColor, setShapeBgColor] = useState(SHAPE_DEFAULT_BG);
+  const [shapeBorderColor, setShapeBorderColor] = useState(SHAPE_DEFAULT_BORDER);
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
+  const [enteredGroupId, setEnteredGroupId] = useState<string | null>(null);
   const [snapEnabled, setSnapEnabled] = useState<boolean>(true);
   const { isHydrated } = useTheme();
   const [selectedElementIds, setSelectedElementIds] = useState<string[]>([]);
@@ -374,14 +386,27 @@ export default function Home() {
   const onSelectElement = useCallback((id: string | null, opts?: { shift?: boolean; ctrl?: boolean }) => {
     if (!id) {
       setSelectedElementIds([]);
+      setEnteredGroupId(null);
       lastClickedRef.current = null;
       return;
     }
     if (id === 'generation-area') {
       setSelectedElementIds(['generation-area']);
+      setEnteredGroupId(null);
       lastClickedRef.current = null;
       return;
     }
+
+    // Group-aware selection: if element is in a group and we haven't entered that group,
+    // select the entire group
+    const el = elements.find(e => e.id === id);
+    if (el?.groupId && el.groupId !== enteredGroupId && !opts?.shift && !opts?.ctrl) {
+      const groupChildIds = getGroupChildIds(elements, el.groupId);
+      setSelectedElementIds([el.groupId, ...groupChildIds]);
+      lastClickedRef.current = id;
+      return;
+    }
+
     if (opts?.shift && lastClickedRef.current) {
       setSelectedElementIds(prev => {
         const elementIds = elements.map(e => e.id);
@@ -405,18 +430,20 @@ export default function Home() {
       setSelectedElementIds([id]);
     }
     lastClickedRef.current = id;
-  }, [elements]);
+  }, [elements, enteredGroupId]);
   const handleMarqueeSelect = useCallback((ids: string[], opts?: { shift?: boolean }) => {
+    // Expand selection to include whole groups when child elements are marquee-selected
+    const expandedIds = expandSelectionToGroups(ids, elements, enteredGroupId);
     if (opts?.shift) {
       setSelectedElementIds(prev => {
-        const merged = new Set([...prev.filter(x => x !== 'generation-area'), ...ids]);
+        const merged = new Set([...prev.filter(x => x !== 'generation-area'), ...expandedIds]);
         return Array.from(merged);
       });
     } else {
-      setSelectedElementIds(ids.length > 0 ? ids : []);
+      setSelectedElementIds(expandedIds.length > 0 ? expandedIds : []);
     }
-    if (ids.length > 0) lastClickedRef.current = ids[ids.length - 1];
-  }, []);
+    if (expandedIds.length > 0) lastClickedRef.current = expandedIds[expandedIds.length - 1];
+  }, [elements, enteredGroupId]);
 
   // Moved element handlers to a reusable hook
   const { moveUp, moveDown, bringToFront, sendToBack } = zOrder;
@@ -428,13 +455,41 @@ export default function Home() {
     setSelectedElementIds([id]);
   };
 
-  // Keep selection valid across history changes
+  // Keep selection and entered group valid across history changes
   useEffect(() => {
     setSelectedElementIds(prev => {
       const valid = prev.filter(id => id === 'generation-area' || elements.some(e => e.id === id));
       return valid.length !== prev.length ? valid : prev;
     });
-  }, [elements]);
+    // Clear enteredGroupId if the group no longer exists
+    if (enteredGroupId && !elements.some(e => e.id === enteredGroupId)) {
+      setEnteredGroupId(null);
+    }
+  }, [elements, enteredGroupId]);
+
+  // Group/ungroup handlers
+  const handleGroup = useCallback(() => {
+    const ids = selectedElementIds.filter(id => id !== 'generation-area');
+    // Only group non-grouped elements (skip elements already in a group and group elements themselves)
+    const groupableIds = ids.filter(id => {
+      const el = elements.find(e => e.id === id);
+      return el && el.type !== 'group' && !el.groupId;
+    });
+    if (groupableIds.length < 2) return;
+    const cmd = new GroupElementsCommand(groupableIds);
+    commandManager.execute(cmd);
+    setSelectedElementIds([cmd.groupId, ...groupableIds]);
+  }, [selectedElementIds, elements]);
+
+  const handleUngroup = useCallback(() => {
+    const ids = selectedElementIds.filter(id => id !== 'generation-area');
+    const groupEl = ids.map(id => elements.find(e => e.id === id)).find(e => e?.type === 'group');
+    if (!groupEl) return;
+    const childIds = getGroupChildIds(elements, groupEl.id);
+    commandManager.execute(new UngroupCommand(groupEl.id));
+    setSelectedElementIds(childIds);
+    setEnteredGroupId(null);
+  }, [selectedElementIds, elements]);
 
   // Global hotkeys
   useGlobalHotkeys({
@@ -452,6 +507,8 @@ export default function Home() {
     setInteractionMode,
     brushSize,
     setBrushSize,
+    onGroup: handleGroup,
+    onUngroup: handleUngroup,
   });
 
   // Update URL with sessionId
@@ -708,9 +765,16 @@ export default function Home() {
   }, [textFontSize, textColor]);
 
   const handleTextEdit = useCallback((id: string) => {
+    const el = elements.find(e => e.id === id);
+    // If element is in a group we haven't entered, enter the group first
+    if (el?.groupId && el.groupId !== enteredGroupId) {
+      setEnteredGroupId(el.groupId);
+      setSelectedElementIds([id]);
+      return;
+    }
     pendingTextIdRef.current = null;
     setEditingTextId(id);
-  }, []);
+  }, [elements, enteredGroupId]);
 
   const handleStickyCreate = useCallback((worldPos: { x: number; y: number }) => {
     const id = crypto.randomUUID();
@@ -737,7 +801,52 @@ export default function Home() {
     setInteractionMode('select');
   }, [stickyColor, stickyShape]);
 
+  const handleShapeCreate = useCallback((worldPos: { x: number; y: number }) => {
+    const id = crypto.randomUUID();
+    const element: CanvasElementData = {
+      id,
+      type: 'shape',
+      shapeType,
+      x: worldPos.x - SHAPE_DEFAULT_SIZE.width / 2,
+      y: worldPos.y - SHAPE_DEFAULT_SIZE.height / 2,
+      width: SHAPE_DEFAULT_SIZE.width,
+      height: SHAPE_DEFAULT_SIZE.height,
+      text: '',
+      fontSize: 16,
+      fontFamily: 'Inter',
+      fill: '#000000',
+      bgColor: shapeBgColor,
+      borderColor: shapeBorderColor,
+      borderWidth: SHAPE_DEFAULT_BORDER_WIDTH,
+      textAlign: 'center',
+      verticalAlign: 'middle',
+      padding: SHAPE_DEFAULT_PADDING,
+      visible: true,
+      locked: false,
+    };
+    commandManager.execute(new AddElementCommand(element));
+    setSelectedElementIds([id]);
+    setInteractionMode('select');
+  }, [shapeType, shapeBgColor, shapeBorderColor]);
+
+  const handleShapeEdit = useCallback((id: string) => {
+    const el = elements.find(e => e.id === id);
+    if (el?.groupId && el.groupId !== enteredGroupId) {
+      setEnteredGroupId(el.groupId);
+      setSelectedElementIds([id]);
+      return;
+    }
+    pendingTextIdRef.current = null;
+    setEditingTextId(id);
+  }, [elements, enteredGroupId]);
+
   const handleStickyEdit = useCallback((id: string) => {
+    const el = elements.find(e => e.id === id);
+    if (el?.groupId && el.groupId !== enteredGroupId) {
+      setEnteredGroupId(el.groupId);
+      setSelectedElementIds([id]);
+      return;
+    }
     pendingTextIdRef.current = null;
     setEditingTextId(id);
   }, []);
@@ -797,6 +906,12 @@ export default function Home() {
             onStickyColorChange={setStickyColor}
             stickyShape={stickyShape}
             onStickyShapeChange={setStickyShape}
+            shapeType={shapeType}
+            onShapeTypeChange={setShapeType}
+            shapeBgColor={shapeBgColor}
+            onShapeBgColorChange={setShapeBgColor}
+            shapeBorderColor={shapeBorderColor}
+            onShapeBorderColorChange={setShapeBorderColor}
           />
           {/* Canvas top toolbar (actions) */}
           <CanvasTopToolbar
@@ -886,6 +1001,8 @@ export default function Home() {
               onTextEdit={handleTextEdit}
               onStickyCreate={handleStickyCreate}
               onStickyEdit={handleStickyEdit}
+              onShapeCreate={handleShapeCreate}
+              onShapeEdit={handleShapeEdit}
               editingTextId={editingTextId}
               onImageDrop={async (file, position) => {
                 if (!isImageFile(file)) return;
@@ -985,11 +1102,39 @@ export default function Home() {
               }
             }}
             onToggleLocked={()=> {/* lock removed */}}
-            onDelete={(id)=>{ removeElement(id); setSelectedElementIds(prev => prev.filter(x => x !== id)); }}
+            onDelete={(id)=>{
+              const el = elements.find(e => e.id === id);
+              // If deleting a group, delete children too
+              if (el?.type === 'group') {
+                const childIds = getGroupChildIds(elements, id);
+                const allIds = [id, ...childIds];
+                commandManager.execute(new CompositeCommand(allIds.map(cid => new RemoveElementCommand(cid))));
+              } else {
+                removeElement(id);
+                // If deleting last child in a group, clean up the empty group
+                if (el?.groupId) {
+                  const siblings = getGroupChildIds(elements, el.groupId).filter(cid => cid !== id);
+                  if (siblings.length === 0) {
+                    removeElement(el.groupId);
+                  }
+                }
+              }
+              setSelectedElementIds(prev => prev.filter(x => x !== id));
+            }}
             onMoveUp={moveUp}
             onMoveDown={moveDown}
             onBringToFront={bringToFront}
             onSendToBack={sendToBack}
+            onGroup={handleGroup}
+            onUngroup={handleUngroup}
+            enteredGroupId={enteredGroupId}
+            onEnterGroup={setEnteredGroupId}
+            onToggleGroupCollapsed={(groupId) => {
+              const el = elements.find(e => e.id === groupId);
+              if (el) {
+                commandManager.execute(new UpdateElementCommand(groupId, { collapsed: el.collapsed ?? false }, { collapsed: !el.collapsed }));
+              }
+            }}
             onDownload={async (id) => {
               const el = elements.find(e => e.id === id);
               if (!el || !el.src) return;

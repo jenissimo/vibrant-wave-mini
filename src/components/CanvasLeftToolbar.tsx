@@ -1,7 +1,7 @@
 import React, { useRef, useState, useCallback, useEffect } from 'react';
-import { MousePointer, Hand, Pen, Type, StickyNote, GripHorizontal } from 'lucide-react';
+import { MousePointer, Hand, Pen, Type, StickyNote, GripHorizontal, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import type { InteractionMode } from '@/components/Canvas';
+import type { InteractionMode, ShapeType } from '@/components/Canvas';
 import { STICKY_COLORS } from '@/lib/canvasDefaults';
 
 interface CanvasLeftToolbarProps {
@@ -17,6 +17,12 @@ interface CanvasLeftToolbarProps {
   onStickyColorChange?: (color: string) => void;
   stickyShape?: 'square' | 'horizontal';
   onStickyShapeChange?: (shape: 'square' | 'horizontal') => void;
+  shapeType?: ShapeType;
+  onShapeTypeChange?: (shape: ShapeType) => void;
+  shapeBgColor?: string;
+  onShapeBgColorChange?: (color: string) => void;
+  shapeBorderColor?: string;
+  onShapeBorderColorChange?: (color: string) => void;
 }
 
 const tools: { mode: InteractionMode; icon: React.ElementType; label: string; hotkey: string }[] = [
@@ -29,6 +35,51 @@ const drawTools: { mode: InteractionMode; icon: React.ElementType; label: string
   { mode: 'text', icon: Type, label: 'Text', hotkey: 'T' },
   { mode: 'sticky', icon: StickyNote, label: 'Sticky Note', hotkey: 'S' },
 ];
+
+const shapeIcons: Record<ShapeType, { svg: React.ReactNode; label: string }> = {
+  rectangle: {
+    label: 'Rectangle',
+    svg: (
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <rect x="1" y="2" width="12" height="10" />
+      </svg>
+    ),
+  },
+  roundedRect: {
+    label: 'Rounded Rect',
+    svg: (
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <rect x="1" y="2" width="12" height="10" rx="3" />
+      </svg>
+    ),
+  },
+  ellipse: {
+    label: 'Ellipse',
+    svg: (
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <ellipse cx="7" cy="7" rx="6" ry="5" />
+      </svg>
+    ),
+  },
+  diamond: {
+    label: 'Diamond',
+    svg: (
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <polygon points="7,1 13,7 7,13 1,7" />
+      </svg>
+    ),
+  },
+  triangle: {
+    label: 'Triangle',
+    svg: (
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <polygon points="7,1 13,13 1,13" />
+      </svg>
+    ),
+  },
+};
+
+const shapeTypeList: ShapeType[] = ['rectangle', 'roundedRect', 'ellipse', 'diamond', 'triangle'];
 
 const CanvasLeftToolbar: React.FC<CanvasLeftToolbarProps> = ({
   interactionMode,
@@ -43,14 +94,24 @@ const CanvasLeftToolbar: React.FC<CanvasLeftToolbarProps> = ({
   onStickyColorChange,
   stickyShape = 'square',
   onStickyShapeChange,
+  shapeType = 'rectangle',
+  onShapeTypeChange,
+  shapeBgColor = '#ffffff',
+  onShapeBgColorChange,
+  shapeBorderColor = '#374151',
+  onShapeBorderColorChange,
 }) => {
   const colorInputRef = useRef<HTMLInputElement>(null);
+  const shapeBgInputRef = useRef<HTMLInputElement>(null);
+  const shapeBorderInputRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const showBrushTextControls = interactionMode === 'brush' || interactionMode === 'text';
   const showStickyControls = interactionMode === 'sticky';
+  const showShapeControls = interactionMode === 'shape';
 
   const [pos, setPos] = useState({ x: 12, y: 68 });
   const [dragging, setDragging] = useState(false);
+  const [shapeDropdownOpen, setShapeDropdownOpen] = useState(false);
   const dragOffset = useRef({ x: 0, y: 0 });
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -83,6 +144,18 @@ const CanvasLeftToolbar: React.FC<CanvasLeftToolbarProps> = ({
       window.removeEventListener('mouseup', handleUp);
     };
   }, [dragging]);
+
+  // Close shape dropdown on outside click
+  useEffect(() => {
+    if (!shapeDropdownOpen) return;
+    const handleClick = (e: MouseEvent) => {
+      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
+        setShapeDropdownOpen(false);
+      }
+    };
+    window.addEventListener('mousedown', handleClick);
+    return () => window.removeEventListener('mousedown', handleClick);
+  }, [shapeDropdownOpen]);
 
   return (
     <div
@@ -124,6 +197,42 @@ const CanvasLeftToolbar: React.FC<CanvasLeftToolbarProps> = ({
           <t.icon size={16} />
         </Button>
       ))}
+      {/* Shape tool with dropdown */}
+      <div className="relative">
+        <Button
+          variant={interactionMode === 'shape' ? 'default' : 'ghost'}
+          size="icon"
+          className="w-8 h-8"
+          onClick={() => setInteractionMode('shape')}
+          title={`${shapeIcons[shapeType].label} (R)`}
+        >
+          {shapeIcons[shapeType].svg}
+        </Button>
+        <button
+          className="absolute -right-0.5 -bottom-0.5 w-3 h-3 flex items-center justify-center rounded-sm bg-background border border-border text-muted-foreground hover:text-foreground"
+          onClick={(e) => { e.stopPropagation(); setShapeDropdownOpen(!shapeDropdownOpen); }}
+        >
+          <ChevronDown size={8} />
+        </button>
+        {shapeDropdownOpen && (
+          <div className="absolute left-full top-0 ml-1 canvas-toolbar backdrop-blur shadow-md rounded-md p-1 flex flex-col gap-0.5 z-20">
+            {shapeTypeList.map((st) => (
+              <button
+                key={st}
+                className={`flex items-center gap-2 px-2 py-1 rounded text-xs whitespace-nowrap hover:bg-accent/50 ${shapeType === st ? 'bg-accent text-accent-foreground' : ''}`}
+                onClick={() => {
+                  onShapeTypeChange?.(st);
+                  setInteractionMode('shape');
+                  setShapeDropdownOpen(false);
+                }}
+              >
+                {shapeIcons[st].svg}
+                <span>{shapeIcons[st].label}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
       {showBrushTextControls && (
         <>
           <div className="w-5 h-px bg-border my-0.5" />
@@ -192,6 +301,45 @@ const CanvasLeftToolbar: React.FC<CanvasLeftToolbarProps> = ({
                 title={c.name}
               />
             ))}
+          </div>
+        </>
+      )}
+      {showShapeControls && (
+        <>
+          <div className="w-5 h-px bg-border my-0.5" />
+          {/* Fill color */}
+          <div className="flex flex-col items-center gap-1">
+            <span className="text-[9px] text-muted-foreground">Fill</span>
+            <button
+              className="w-6 h-6 rounded-md border border-border cursor-pointer hover:ring-1 hover:ring-primary transition-shadow"
+              style={{ backgroundColor: shapeBgColor }}
+              onClick={() => shapeBgInputRef.current?.click()}
+              title="Fill Color"
+            />
+            <input
+              ref={shapeBgInputRef}
+              type="color"
+              value={shapeBgColor}
+              onChange={(e) => onShapeBgColorChange?.(e.target.value)}
+              className="sr-only"
+            />
+          </div>
+          {/* Border color */}
+          <div className="flex flex-col items-center gap-1">
+            <span className="text-[9px] text-muted-foreground">Border</span>
+            <button
+              className="w-6 h-6 rounded-md border-2 cursor-pointer hover:ring-1 hover:ring-primary transition-shadow"
+              style={{ borderColor: shapeBorderColor, backgroundColor: 'transparent' }}
+              onClick={() => shapeBorderInputRef.current?.click()}
+              title="Border Color"
+            />
+            <input
+              ref={shapeBorderInputRef}
+              type="color"
+              value={shapeBorderColor}
+              onChange={(e) => onShapeBorderColorChange?.(e.target.value)}
+              className="sr-only"
+            />
           </div>
         </>
       )}
