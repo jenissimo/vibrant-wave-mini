@@ -5,18 +5,19 @@ import { KonvaEventObject } from 'konva/lib/Node';
 import CanvasImage from '@/components/canvas/CanvasImage';
 import CanvasDrawing from '@/components/canvas/CanvasDrawing';
 import CanvasText from '@/components/canvas/CanvasText';
+import CanvasSticky from '@/components/canvas/CanvasSticky';
 import usePatternDots from '@/components/canvas/usePatternDots';
 import GenerationGrid from '@/components/canvas/GenerationGrid';
 import SelectionTransformer from '@/components/canvas/SelectionTransformer';
-import { MIN_ELEMENT_SIZE } from '@/lib/canvasDefaults';
+import { MIN_ELEMENT_SIZE, STICKY_MIN_SIZE } from '@/lib/canvasDefaults';
 import { useCanvasSnapping } from '@/lib/useCanvasSnapping';
 import { useTheme } from '@/lib/useTheme';
 
-export type InteractionMode = 'select' | 'pan' | 'brush' | 'text';
+export type InteractionMode = 'select' | 'pan' | 'brush' | 'text' | 'sticky';
 
 export interface CanvasElementData {
   id: string;
-  type: 'image' | 'drawing' | 'text';
+  type: 'image' | 'drawing' | 'text' | 'sticky';
   // Common
   x: number;
   y: number;
@@ -43,6 +44,10 @@ export interface CanvasElementData {
   fontSize?: number;
   fontFamily?: string;
   fill?: string;           // text color
+  fontStyle?: string;      // 'normal' | 'bold' | 'italic' | 'bold italic'
+  // Sticky-specific
+  stickyColor?: string;    // background hex color
+  stickyShape?: 'square' | 'horizontal';
 }
 
 interface CanvasProps {
@@ -88,6 +93,8 @@ interface CanvasProps {
   onDrawingComplete?: (element: CanvasElementData) => void;
   onTextCreate?: (worldPos: { x: number; y: number }) => void;
   onTextEdit?: (id: string) => void;
+  onStickyCreate?: (worldPos: { x: number; y: number }) => void;
+  onStickyEdit?: (id: string) => void;
   editingTextId?: string | null;
 }
 
@@ -162,6 +169,8 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
   onDrawingComplete,
   onTextCreate,
   onTextEdit,
+  onStickyCreate,
+  onStickyEdit,
   editingTextId,
 }, ref) => {
   const stageRef = useRef<Konva.Stage | null>(null);
@@ -485,8 +494,10 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
     if (!node) return;
     const scaleX = node.scaleX() || 1;
     const scaleY = node.scaleY() || 1;
-    const nextWidth = Math.max(MIN_ELEMENT_SIZE, node.width() * scaleX);
-    const nextHeight = Math.max(MIN_ELEMENT_SIZE, node.height() * scaleY);
+    const el = elementsRef.current.find(e => e.id === id);
+    const minSize = el?.type === 'sticky' ? STICKY_MIN_SIZE : MIN_ELEMENT_SIZE;
+    const nextWidth = Math.max(minSize, node.width() * scaleX);
+    const nextHeight = Math.max(minSize, node.height() * scaleY);
     let next: { x: number; y: number; width: number; height: number; rotation?: number; points?: number[] } = {
       x: node.x(),
       y: node.y(),
@@ -495,7 +506,6 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
       rotation: node.rotation?.() ?? 0,
     };
     // Scale drawing points proportionally
-    const el = elementsRef.current.find(e => e.id === id);
     if (el?.type === 'drawing' && el.points) {
       next.points = el.points.map((val, i) => val * (i % 2 === 0 ? scaleX : scaleY));
     }
@@ -677,8 +687,8 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
     window.addEventListener('mouseup', handleDrawUp);
   }, [onDrawingComplete]);
 
-  // --- Text creation click ---
-  const handleTextClick = useCallback((e: KonvaEventObject<MouseEvent>) => {
+  // --- Element creation click (text / sticky) ---
+  const handleCreationClick = useCallback((e: KonvaEventObject<MouseEvent>, callback?: (worldPos: { x: number; y: number }) => void) => {
     if ((e.evt as MouseEvent).button !== 0) return;
     const target = e.target as Konva.Node;
     const isStage = target?.getClassName?.() === 'Stage';
@@ -690,8 +700,8 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
     if (!pointer) return;
     const worldX = (pointer.x - stageXRef.current) / stageScaleRef.current;
     const worldY = (pointer.y - stageYRef.current) / stageScaleRef.current;
-    onTextCreate?.({ x: worldX, y: worldY });
-  }, [onTextCreate]);
+    callback?.({ x: worldX, y: worldY });
+  }, []);
 
   // Cleanup drawing listeners on unmount
   useEffect(() => {
@@ -703,7 +713,7 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
   // Custom circle cursor for brush/eraser
   const brushCursor = useMemo(() => {
     if (interactionMode !== 'brush') {
-      return ({ select: 'default', pan: 'grab', text: 'text' } as Record<string, string>)[interactionMode] || 'default';
+      return ({ select: 'default', pan: 'grab', text: 'text', sticky: 'crosshair' } as Record<string, string>)[interactionMode] || 'default';
     }
     const diameter = Math.max(4, Math.min(128, (brushSize || 3) * stageScale));
     const r = diameter / 2;
@@ -736,7 +746,8 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
           handleMouseDown(e);
           if (interactionMode === 'select') startMarqueeTracking(e);
           else if (interactionMode === 'brush') startDrawing(e);
-          else if (interactionMode === 'text') handleTextClick(e);
+          else if (interactionMode === 'text') handleCreationClick(e, onTextCreate);
+          else if (interactionMode === 'sticky') handleCreationClick(e, onStickyCreate);
         }}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseLeave}
@@ -808,6 +819,8 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
                 return <CanvasDrawing key={el.id} {...commonProps} />;
               case 'text':
                 return <CanvasText key={el.id} {...commonProps} onDoubleClick={() => onTextEdit?.(el.id)} isEditing={editingTextId === el.id} />;
+              case 'sticky':
+                return <CanvasSticky key={el.id} {...commonProps} onDoubleClick={() => onStickyEdit?.(el.id)} isEditing={editingTextId === el.id} />;
               default:
                 return null;
             }
@@ -855,7 +868,7 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({
               y={generationAreaAligned.y - 3}
               text={String(attachmentCount + 1)}
               fontSize={12}
-              fontFamily="Arial"
+              fontFamily="Inter"
               fill={themeColors.badgeText}
               align="center"
               verticalAlign="middle"

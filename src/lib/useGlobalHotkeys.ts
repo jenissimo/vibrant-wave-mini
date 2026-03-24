@@ -79,6 +79,7 @@ export function useGlobalHotkeys(args: {
     { key: 'h', handler: () => setInteractionMode('pan') },
     { key: 'b', handler: () => setInteractionMode('brush') },
     { key: 't', handler: () => setInteractionMode('text') },
+    { key: 's', handler: () => setInteractionMode('sticky') },
     { key: '[', handler: () => setBrushSize(Math.max(1, brushSize - (brushSize > 10 ? 5 : 1))) },
     { key: ']', handler: () => setBrushSize(Math.min(50, brushSize + (brushSize >= 10 ? 5 : 1))) },
   ], enabled);
